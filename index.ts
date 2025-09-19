@@ -11,10 +11,8 @@ import {
 } from '@solana/web3.js';
 import { message } from 'telegraf/filters';
 
-const BOT_TOKEN = '8247043011:AAEYHENjQMerh4W5vwyOSLrssHB3jjfKbpg';
-const connection = new Connection(
-  process.env.ALCHEMY_DEVNET_RPC_URL!
-);
+const BOT_TOKEN = process.env.TG_BOT_TOKEN!;
+const connection = new Connection(process.env.ALCHEMY_DEVNET_RPC_URL!);
 
 const bot = new Telegraf(BOT_TOKEN);
 
@@ -27,14 +25,12 @@ const keyboard = Markup.inlineKeyboard([
   ],
   [
     Markup.button.callback('Check your balance', CallbackIds.GET_USER_BALANCE),
-
     Markup.button.callback('Send SOL', CallbackIds.SEND_SOL),
   ],
   [Markup.button.callback('Airdrop SOL', CallbackIds.AIRDROP_SOL)],
 ]);
 
 bot.start((ctx) => {
-
   let welcomeMessage = 'hello there welcome to boogie bot';
 
   return ctx.reply(welcomeMessage, {
@@ -126,11 +122,11 @@ bot.action(CallbackIds.GET_USER_BALANCE, async (ctx) => {
   const balance = await connection.getBalance(user.publicKey);
   console.log(balance);
 
-  ctx.sendMessage(`Your balance: ${balance/LAMPORTS_PER_SOL}`);
+  ctx.sendMessage(`Your balance: ${balance / LAMPORTS_PER_SOL}`);
 });
 
 bot.action(CallbackIds.SEND_SOL, async (ctx) => {
-  ctx.sendMessage("Please send address of the recipient: ")
+  ctx.sendMessage('Please send address of the recipient: ');
 });
 
 bot.on(message('text'), async (ctx) => {
