@@ -1,7 +1,7 @@
 import { message } from "telegraf/filters";
 import bot from "./bot";
 import { Markup } from "telegraf";
-import { viewAllCommandsResponse } from "./bot/utils/responses";
+import { viewAllCommandsResponse, sendNewsList } from "./bot/utils/responses";
 import { getNews } from "./services/news";
 
 bot.start((ctx) => {
@@ -19,23 +19,29 @@ bot.help((ctx) => {
 });
 
 bot.hears("hi", (ctx) => ctx.reply("Hey there"));
-bot.hears("help", (ctx) => ctx.reply("Use /help to understand how i work\n"));
+bot.hears("help", (ctx) => ctx.reply("Use /help to see what i can do\n"));
 
 bot.command("whoareyou", (ctx) => {
   ctx.reply("I am a soon to be web3 bot");
 });
 
 bot.command("news", async (ctx) => {
-  const newsResponse = await getNews();
+  // const newsResponse = await getNews();
+  
+  // ctx.react("👨‍💻");
+  // if (newsResponse.length === 0) {
+  //   ctx.reply("No news available at the moment.");
+  //   return;
+  // }
 
-  if (newsResponse.length === 0) {
-    ctx.reply("No news available at the moment.");
-    return;
-  }
+  // await sendNewsList(ctx, newsResponse, {
+  //   heading: "Today’s Top Crypto Headlines",
+  //   chunkSize: 5,
+  //   maxDescriptionLen: 280,
+  // });
 
-  newsResponse.news.forEach((news: any) => {
-    ctx.reply(`title: ${news.title}\ndescription: ${news.description}`);
-  });
+  ctx.react("😴");
+  ctx.reply("Credit nahi hai bhai surry.");
 });
 
 bot.action("commands", (ctx) => {
@@ -43,7 +49,9 @@ bot.action("commands", (ctx) => {
   viewAllCommandsResponse(ctx);
 });
 
-bot;
+bot.command("commands", (ctx) => {
+  viewAllCommandsResponse(ctx);
+});
 
 bot.launch(() => {
   console.log("Bot has been launched 🚀🚀🚀");
