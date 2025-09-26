@@ -18,6 +18,7 @@
     "ts-node": "^10.9.2"
   },
   "dependencies": {
+    "@chaingpt/ainews": "^0.0.9",
     "dotenv": "^17.2.2",
     "telegraf": "^4.16.3"
   }
