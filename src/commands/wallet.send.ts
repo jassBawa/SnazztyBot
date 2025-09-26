@@ -25,11 +25,20 @@ export function registerWalletSend(bot: Telegraf) {
       const kp = getOrCreateUserKeypair(ownerLocator);
       const balances = await getBalances(kp.publicKey);
       await ctx.reply(
-        `Balance native=${balances.nativeSol} SOL, USDC=${balances.usdc}`
+        `💰 *Current Balance*\n\n` +
+        `• SOL: \`${Number(balances.nativeSol).toFixed(6)}\`\n\n` +
+        `Processing transfer...`,
+        { parse_mode: 'Markdown' }
       );
 
       const tx = await sendUsdc(ownerLocator, recipient, amount);
-      await ctx.reply(`Sent ${amount} USDC → ${recipient}\n${tx.explorerLink}`);
+      await ctx.reply(
+        `✅ *Transfer Successful!*\n\n` +
+        `📤 Sent: \`${amount}\` USDC\n` +
+        `📍 To: \`${recipient}\`\n\n` +
+        `🔗 [View Transaction](${tx.explorerLink})`,
+        { parse_mode: 'Markdown' }
+      );
     } catch (err: any) {
       await ctx.reply(`Send failed: ${err?.message ?? "unknown error"}`);
     }

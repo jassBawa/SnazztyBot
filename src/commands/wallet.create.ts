@@ -21,7 +21,12 @@ export function registerWalletCreate(bot: Telegraf) {
         lastName: ctx.from?.last_name ?? null,
         ownerLocator,
       });
-      await ctx.reply(`Wallet (Solana)\naddress: ${pubkey.toBase58()}`);
+      await ctx.reply(
+        `🎉 *Wallet Created!*\n\n` +
+        `📍 Address:\n\`${pubkey.toBase58()}\`\n\n` +
+        `Your Solana wallet is ready to use! 🚀`,
+        { parse_mode: 'Markdown' }
+      );
     } catch (err: any) {
       await ctx.reply(`Failed to create wallet: ${err?.message ?? "unknown error"}`);
     }

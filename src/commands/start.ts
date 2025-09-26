@@ -1,6 +1,6 @@
 import { Telegraf } from "telegraf";
 import { Markup } from "telegraf";
-import { getOrCreateUserKeypair, getBalances } from "../services/solana";
+import { getOrCreateUserKeypair, getBalances, getTokenBalances } from "../services/solana";
 import { getPublicKeyForUser, ensureDbUserWithWallet } from "../services/solana";
 
 function buildOwnerLocatorFromTelegram(ctx: any): string {
@@ -20,13 +20,16 @@ export function registerStart(bot: Telegraf) {
       ownerLocator,
     }).catch(() => {});
     const inlineKb = Markup.inlineKeyboard([
-      [Markup.button.callback("Wallet Balance", "ACTION_WALLET_BALANCE")],
-      [Markup.button.callback("Send USDC", "ACTION_WALLET_SEND")],
-      [Markup.button.callback("Who am I", "ACTION_WHOAMI")],
+      [Markup.button.callback("💰 Wallet Balance", "ACTION_WALLET_BALANCE")],
+      [Markup.button.callback("📤 Send USDC", "ACTION_WALLET_SEND")],
+      [Markup.button.callback("ℹ️ Who am I", "ACTION_WHOAMI")],
+      [Markup.button.callback("🔄 Refresh", "ACTION_REFRESH")],
     ]);
     ctx.reply(
-      `Welcome! Your Solana wallet is ready.\naddress: ${pubkey.toBase58()}\n\nUse the buttons below to get started.`,
-      inlineKb
+      `🚀 *Welcome to SnazztyBot!*\n\nYour Solana wallet is ready:\n\n` +
+      `📍 Address:\n\`${pubkey.toBase58()}\`\n\n` +
+      `Use the buttons below to get started:`,
+      { parse_mode: 'Markdown', ...inlineKb }
     );
   });
 
@@ -35,20 +38,98 @@ export function registerStart(bot: Telegraf) {
       const ownerLocator = buildOwnerLocatorFromTelegram(ctx);
       const kp = getOrCreateUserKeypair(ownerLocator);
       const balances = await getBalances(kp.publicKey);
+      const tokenBalances = await getTokenBalances(kp.publicKey.toBase58());
+
       const native = Number(balances.nativeSol).toFixed(6);
-      const usdc = Number(balances.usdc).toFixed(2);
-      await ctx.reply(`Address: ${kp.publicKey.toBase58()}\nSOL: ${native}\nUSDC: ${usdc}`);
+      
+      let message = `💰 *Wallet Balance*\n\n` +
+        `📍 Address:\n\`${kp.publicKey.toBase58()}\`\n\n` +
+        `💎 *Native Balance:*\n` +
+        `• SOL: \`${native}\`\n`;
+
+      // Add token balances at the bottom
+      if (tokenBalances.length > 0) {
+        message += `\n🪙 *Token Balances:*\n`;
+        tokenBalances.forEach((token) => {
+          const amount = token.amount.toFixed(token.decimals);
+          message += `• ${token.symbol}: \`${amount}\`\n`;
+        });
+      }
+
+      const refreshKb = Markup.inlineKeyboard([
+        [Markup.button.callback("🔄 Refresh Balance", "ACTION_WALLET_BALANCE")],
+        [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
+      ]);
+
+      await ctx.reply(message, { parse_mode: 'Markdown', ...refreshKb });
     } catch (err: any) {
-      await ctx.reply(`Failed to fetch balance: ${err?.message ?? "unknown error"}`);
+      await ctx.reply(`❌ Failed to fetch balance: ${err?.message ?? "unknown error"}`);
     }
   });
 
   bot.action("ACTION_WALLET_SEND", async (ctx) => {
-    await ctx.reply("Use /wallet_send <recipient> <amount>");
+    const sendKb = Markup.inlineKeyboard([
+      [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
+    ]);
+    await ctx.reply(
+      `📤 *Send USDC*\n\n` +
+      `To send USDC, use the command:\n` +
+      `\`/wallet_send <recipient_address> <amount>\`\n\n` +
+      `Example:\n` +
+      `\`/wallet_send 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU 10.5\``,
+      { parse_mode: 'Markdown', ...sendKb }
+    );
   });
 
   bot.action("ACTION_WHOAMI", async (ctx) => {
-    await ctx.reply("I am SnazztyBot, your Solana assistant.");
+    const whoamiKb = Markup.inlineKeyboard([
+      [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
+    ]);
+    await ctx.reply(
+      `ℹ️ *About SnazztyBot*\n\n` +
+      `I am your Solana wallet assistant! 🤖\n\n` +
+      `✨ *Features:*\n` +
+      `• Create & manage Solana wallets\n` +
+      `• Check balances (SOL, USDC, tokens)\n` +
+      `• Send USDC transfers\n` +
+      `• View transaction history\n\n` +
+      `Built with ❤️ for the Solana ecosystem`,
+      { parse_mode: 'Markdown', ...whoamiKb }
+    );
+  });
+
+  bot.action("ACTION_REFRESH", async (ctx) => {
+    const ownerLocator = buildOwnerLocatorFromTelegram(ctx);
+    const pubkey = getPublicKeyForUser(ownerLocator);
+    const inlineKb = Markup.inlineKeyboard([
+      [Markup.button.callback("💰 Wallet Balance", "ACTION_WALLET_BALANCE")],
+      [Markup.button.callback("📤 Send USDC", "ACTION_WALLET_SEND")],
+      [Markup.button.callback("ℹ️ Who am I", "ACTION_WHOAMI")],
+      [Markup.button.callback("🔄 Refresh", "ACTION_REFRESH")],
+    ]);
+    ctx.reply(
+      `🔄 *Refreshed!*\n\nYour Solana wallet:\n\n` +
+      `📍 Address:\n\`${pubkey.toBase58()}\`\n\n` +
+      `Use the buttons below:`,
+      { parse_mode: 'Markdown', ...inlineKb }
+    );
+  });
+
+  bot.action("ACTION_MAIN_MENU", async (ctx) => {
+    const ownerLocator = buildOwnerLocatorFromTelegram(ctx);
+    const pubkey = getPublicKeyForUser(ownerLocator);
+    const inlineKb = Markup.inlineKeyboard([
+      [Markup.button.callback("💰 Wallet Balance", "ACTION_WALLET_BALANCE")],
+      [Markup.button.callback("📤 Send USDC", "ACTION_WALLET_SEND")],
+      [Markup.button.callback("ℹ️ Who am I", "ACTION_WHOAMI")],
+      [Markup.button.callback("🔄 Refresh", "ACTION_REFRESH")],
+    ]);
+    ctx.reply(
+      `🏠 *Main Menu*\n\nYour Solana wallet:\n\n` +
+      `📍 Address:\n\`${pubkey.toBase58()}\`\n\n` +
+      `Choose an action:`,
+      { parse_mode: 'Markdown', ...inlineKb }
+    );
   });
 }
 

@@ -6,7 +6,13 @@ import { upsertTelegramUser } from "./db";
 
 type Balances = {
   nativeSol: string;
-  usdc: string;
+};
+
+type TokenBalance = {
+  mint: string;
+  amount: number;
+  decimals: number;
+  symbol?: string;
 };
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -84,17 +90,45 @@ export async function getBalances(pubkey: PublicKey): Promise<Balances> {
   const nativeLamports = await connection.getBalance(pubkey);
   const nativeSol = formatSol(nativeLamports);
 
-  const usdcMint = process.env.USDC_MINT_ADDRESS;
-  if (!usdcMint) {
-    return { nativeSol, usdc: "0" };
-  }
-
-  const ata = await getAssociatedTokenAddress(new PublicKey(usdcMint), pubkey, false);
-  const tokenBalResp = await connection.getTokenAccountBalance(ata).catch(() => null);
-  const usdc = tokenBalResp?.value?.uiAmountString ?? "0";
-
-  return { nativeSol, usdc };
+  return { nativeSol };
 }
+
+// Common token symbols mapping
+const TOKEN_SYMBOLS: Record<string, string> = {
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
+  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
+  "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": "BONK",
+  "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R": "RAY",
+  "So11111111111111111111111111111111111111112": "SOL",
+};
+
+export async function getTokenBalances(walletAddress: string): Promise<TokenBalance[]> {
+  const connection = getConnection();
+  const pubKey = new PublicKey(walletAddress);
+
+  // Get all token accounts owned by the wallet
+  const tokenAccounts = await connection.getParsedTokenAccountsByOwner(pubKey, {
+    programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+  });
+
+  // Map to readable format with symbols
+  const balances = tokenAccounts.value.map((accountInfo) => {
+    const data = accountInfo.account.data.parsed.info;
+    const mint = data.mint;
+    const amount = Number(data.tokenAmount.amount) / Math.pow(10, data.tokenAmount.decimals);
+    const symbol = TOKEN_SYMBOLS[mint] || mint.substring(0, 4).toUpperCase();
+    
+    return {
+      mint,
+      amount,
+      decimals: data.tokenAmount.decimals,
+      symbol,
+    };
+  });
+
+  return balances;
+}
+
 
 function decimalToU64(amount: string, decimals: number): bigint {
   const [i, f = ""] = amount.split(".");
