@@ -1,11 +1,7 @@
 import { Telegraf } from "telegraf";
-import { CrossmintWalletService } from "../services/crossmint";
-import type { Chain } from "@crossmint/wallets-sdk/dist/chains/chains";
+import { getPublicKeyForUser, ensureDbUserWithWallet } from "../services/solana";
 
-function resolveDefaultChain(): Chain {
-  const chain = (process.env.CROSSMINT_DEFAULT_CHAIN ?? "solana").trim();
-  return chain as Chain;
-}
+function resolveDefaultChain() { return "solana" as const; }
 
 function buildOwnerLocatorFromTelegram(ctx: any): string {
   const userId = ctx.from?.id ?? "unknown";
@@ -15,14 +11,17 @@ function buildOwnerLocatorFromTelegram(ctx: any): string {
 export function registerWalletCreate(bot: Telegraf) {
   bot.command("wallet_create", async (ctx) => {
     try {
-      const chain = resolveDefaultChain();
       const ownerLocator = buildOwnerLocatorFromTelegram(ctx);
-      const service = CrossmintWalletService.getInstance();
-      const wallet = await service.createWallet({ chain, ownerLocator });
-
-      await ctx.reply(
-        `Wallet created on ${wallet.chain}:\naddress: ${wallet.address}`
-      );
+      resolveDefaultChain();
+      const pubkey = getPublicKeyForUser(ownerLocator);
+      await ensureDbUserWithWallet({
+        telegramId: BigInt(ctx.from?.id ?? 0),
+        username: ctx.from?.username ?? null,
+        firstName: ctx.from?.first_name ?? null,
+        lastName: ctx.from?.last_name ?? null,
+        ownerLocator,
+      });
+      await ctx.reply(`Wallet (Solana)\naddress: ${pubkey.toBase58()}`);
     } catch (err: any) {
       await ctx.reply(`Failed to create wallet: ${err?.message ?? "unknown error"}`);
     }
