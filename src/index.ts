@@ -6,6 +6,7 @@ import { registerCommands } from "./commands";
 bot.help((ctx) => ctx.reply("Use /wallet_create, /wallet_balance, /whoami"));
 bot.on(message("sticker"), (ctx) => ctx.reply("👍"));
 bot.hears("hi", (ctx) => ctx.reply("Hey there"));
+bot.hears("help", (ctx) => ctx.reply("Use /help to see what i can do\n"));
 
 // register modular commands
 registerCommands(bot);
