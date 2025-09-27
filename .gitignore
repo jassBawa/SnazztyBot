@@ -1,7 +1,35 @@
-node_modules
+node_modules/
+dist/
 
 .env
 !.env.example
 **.env**
+/src/generated/prisma
 
-dist
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+
+# SQLite / Prisma
+prisma/dev.db
+prisma/dev.db-journal
+*.db
+*.db-journal
+dev.db
+device.db
+
+# Local keystore
+data/wallets.json
+
+# Caches
+.turbo/
+.cache/
