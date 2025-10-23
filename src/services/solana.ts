@@ -99,6 +99,82 @@ export async function getBalances(pubkey: PublicKey): Promise<Balances> {
   return { nativeSol };
 }
 
+/**
+ * Validate if a string is a valid Solana address
+ */
+export function isValidSolanaAddress(address: string): boolean {
+  try {
+    new PublicKey(address);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * Get token decimals from mint account
+ */
+export async function getTokenDecimals(tokenMint: string): Promise<number> {
+  try {
+    const connection = getConnection();
+    const mintPubkey = new PublicKey(tokenMint);
+
+    const mintInfo = await connection.getParsedAccountInfo(mintPubkey);
+
+    if (mintInfo.value?.data && 'parsed' in mintInfo.value.data) {
+      const decimals = mintInfo.value.data.parsed?.info?.decimals;
+      if (typeof decimals === 'number') {
+        return decimals;
+      }
+    }
+
+    // Default to 9 if unable to fetch
+    return 9;
+  } catch (error) {
+    console.error("[SOLANA] Error fetching token decimals:", error);
+    return 9; // Default fallback
+  }
+}
+
+/**
+ * Get SPL token balance for a specific token mint
+ */
+export async function getTokenBalance(
+  walletPubkey: PublicKey,
+  tokenMint: string
+): Promise<TokenBalance | null> {
+  try {
+    const connection = getConnection();
+    const mintPubkey = new PublicKey(tokenMint);
+
+    // Get associated token address
+    const tokenAccount = await getAssociatedTokenAddress(
+      mintPubkey,
+      walletPubkey
+    );
+
+    // Try to get account info
+    const accountInfo = await getAccount(connection, tokenAccount);
+
+    // Get mint info for decimals
+    const mintInfo = await connection.getParsedAccountInfo(mintPubkey);
+    const decimals = (mintInfo.value?.data as any)?.parsed?.info?.decimals || 9;
+
+    // Format amount
+    const amount = Number(accountInfo.amount) / Math.pow(10, decimals);
+
+    return {
+      mint: tokenMint,
+      amount,
+      decimals,
+    };
+  } catch (error) {
+    // Token account doesn't exist or other error
+    console.error("[SOLANA] Error getting token balance:", error);
+    return null;
+  }
+}
+
 // Common token symbols mapping
 const TOKEN_SYMBOLS: Record<string, string> = {
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",

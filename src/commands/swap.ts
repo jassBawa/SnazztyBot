@@ -1,5 +1,5 @@
 import { Telegraf, Markup } from "telegraf";
-import { getOrCreateUserKeypair, getBalances } from "../services/solana";
+import { getOrCreateUserKeypair, getBalances, isValidSolanaAddress, getTokenBalance } from "../services/solana";
 import { getTelegramId } from "../utils/telegram";
 import { backToMainKeyboard, swapOptionsKeyboard } from "../utils/keyboards";
 import { swapSolForToken, swapTokenForSol, previewSolForToken, previewTokenForSol } from "../services/raydium";
@@ -9,6 +9,7 @@ interface SwapSession {
   action: "buy" | "sell";
   tokenAddress?: string;
   amount?: string;
+  tokenBalance?: number; // For sell action - store available token balance
   step: "awaiting_token" | "awaiting_amount" | "confirming";
 }
 
@@ -97,25 +98,57 @@ export function registerSwapCommands(bot: Telegraf) {
 
     try {
       if (session.step === "awaiting_token") {
-        // Validate token address (basic Solana address validation)
-        if (text.length < 32 || text.length > 44) {
+        // Validate token address using proper Solana validation
+        if (!isValidSolanaAddress(text)) {
           await ctx.reply("❌ Invalid token address. Please send a valid Solana token address.");
           return;
         }
 
         // Update session
         session.tokenAddress = text;
+
+        // For sell action, check if user holds this token
+        if (session.action === "sell") {
+          const kp = await getOrCreateUserKeypair(telegramId);
+          const tokenBalance = await getTokenBalance(kp.publicKey, text);
+
+          if (!tokenBalance || tokenBalance.amount === 0) {
+            await ctx.reply(
+              `❌ You don't hold any of this token!\n\n` +
+                `Token address: \`${text}\`\n` +
+                `Your balance: 0\n\n` +
+                `Please enter a different token address or use /swap to start over.`,
+              { parse_mode: "Markdown" }
+            );
+            return;
+          }
+
+          // Store token balance in session
+          session.tokenBalance = tokenBalance.amount;
+
+          await ctx.reply(
+            `✅ Token address validated!\n\n` +
+              `Token: \`${text}\`\n` +
+              `Your balance: ${tokenBalance.amount.toFixed(6)} tokens\n\n` +
+              `Now, how many tokens do you want to sell?\n\n` +
+              `Example: \`0.1\` or \`10\`\n\n` +
+              `Or send /cancel to cancel.`,
+            { parse_mode: "Markdown" }
+          );
+        } else {
+          // For buy action, just confirm the address
+          await ctx.reply(
+            `✅ Token address received!\n\n` +
+              `Token: \`${text}\`\n\n` +
+              `Now, how much SOL do you want to spend?\n\n` +
+              `Example: \`0.1\` or \`10\`\n\n` +
+              `Or send /cancel to cancel.`,
+            { parse_mode: "Markdown" }
+          );
+        }
+
         session.step = "awaiting_amount";
         userSessions.set(sessionKey, session);
-
-        const actionText = session.action === "buy" ? "buy" : "sell";
-        await ctx.reply(
-          `✅ Token address received!\n\n` +
-            `Now, how much ${session.action === "buy" ? "SOL" : "tokens"} do you want to ${actionText}?\n\n` +
-            `Example: \`0.1\` or \`10\`\n\n` +
-            `Or send /cancel to cancel.`,
-          { parse_mode: "Markdown" }
-        );
       } else if (session.step === "awaiting_amount") {
         const amount = parseFloat(text);
 
@@ -129,14 +162,30 @@ export function registerSwapCommands(bot: Telegraf) {
         const balances = await getBalances(kp.publicKey);
         const solBalance = Number(balances.nativeSol);
 
-        if (session.action === "buy" && amount > solBalance) {
-          await ctx.reply(
-            `❌ Insufficient balance!\n\n` +
-              `You want to spend: ${amount} SOL\n` +
-              `Your balance: ${solBalance} SOL\n\n` +
-              `Please enter a lower amount.`
-          );
-          return;
+        // Validate balance based on action
+        if (session.action === "buy") {
+          // Check SOL balance for buy
+          if (amount > solBalance) {
+            await ctx.reply(
+              `❌ Insufficient SOL balance!\n\n` +
+                `You want to spend: ${amount} SOL\n` +
+                `Your balance: ${solBalance} SOL\n\n` +
+                `Please enter a lower amount.`
+            );
+            return;
+          }
+        } else {
+          // Check token balance for sell
+          const tokenBalance = session.tokenBalance || 0;
+          if (amount > tokenBalance) {
+            await ctx.reply(
+              `❌ Insufficient token balance!\n\n` +
+                `You want to sell: ${amount} tokens\n` +
+                `Your balance: ${tokenBalance.toFixed(6)} tokens\n\n` +
+                `Please enter a lower amount.`
+            );
+            return;
+          }
         }
 
         // Update session
@@ -147,7 +196,6 @@ export function registerSwapCommands(bot: Telegraf) {
         // Show confirmation with buttons
         const actionEmoji = session.action === "buy" ? "🟢" : "🔴";
         const fromToken = session.action === "buy" ? "SOL" : "Token";
-        const toToken = session.action === "buy" ? "Token" : "SOL";
 
         const confirmKeyboard = Markup.inlineKeyboard([
           [
@@ -187,11 +235,17 @@ export function registerSwapCommands(bot: Telegraf) {
           console.error("[SWAP] Preview error:", error.message);
         }
 
+        // Build balance info
+        const balanceInfo = session.action === "buy"
+          ? `Available: ${solBalance} SOL`
+          : `Available: ${session.tokenBalance?.toFixed(6)} tokens`;
+
         await ctx.reply(
           `${actionEmoji} *Confirm Swap*\n\n` +
             `Action: ${session.action.toUpperCase()}\n` +
             `Token: \`${session.tokenAddress}\`\n` +
-            `Amount: ${amount} ${fromToken}\n` +
+            `${balanceInfo}\n` +
+            `Amount to swap: ${amount} ${fromToken}\n` +
             `Expected output: ${expectedOutput}\n` +
             `Price impact: ${priceImpact}${routeInfo}\n\n` +
             `⚠️ *Note:* Actual amount may vary due to slippage.\n` +
