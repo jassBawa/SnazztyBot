@@ -1,46 +1,48 @@
 import { Telegraf } from "telegraf";
-import { getOrCreateUserKeypair, getBalances, sendUsdc } from "../services/solana";
-
-function resolveDefaultChain() { return "solana" as const; }
-
-function buildOwnerLocatorFromTelegram(ctx: any): string {
-  const userId = ctx.from?.id ?? "unknown";
-  return `telegram:${userId}`;
-}
+import { getOrCreateUserKeypair, getBalances, sendToken } from "../services/solana";
+import { getTelegramId } from "../utils/telegram";
 
 export function registerWalletSend(bot: Telegraf) {
   bot.command("wallet_send", async (ctx) => {
     try {
       const parts = (ctx.message as any).text.trim().split(/\s+/);
-      // expecting: /wallet_send <recipient> <amount>
-      if (parts.length < 3) {
-        await ctx.reply("Usage: /wallet_send <recipient> <amount>");
+      // expecting: /wallet_send <token> <recipient> <amount>
+      if (parts.length < 4) {
+        await ctx.reply(
+          "Usage: /wallet_send <token> <recipient> <amount>\n\n" +
+          "Example: /wallet_send USDC 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU 10.5"
+        );
         return;
       }
 
-      const recipient = parts[1];
-      const amount = parts[2];
-      const ownerLocator = buildOwnerLocatorFromTelegram(ctx);
-      resolveDefaultChain();
-      const kp = getOrCreateUserKeypair(ownerLocator);
+      const token = parts[1];
+      const recipient = parts[2];
+      const amount = parts[3];
+      const telegramId = getTelegramId(ctx);
+
+      // Get current balance
+      const kp = await getOrCreateUserKeypair(telegramId);
       const balances = await getBalances(kp.publicKey);
+
       await ctx.reply(
         `💰 *Current Balance*\n\n` +
         `• SOL: \`${Number(balances.nativeSol).toFixed(6)}\`\n\n` +
-        `Processing transfer...`,
+        `Processing ${token} transfer...`,
         { parse_mode: 'Markdown' }
       );
 
-      const tx = await sendUsdc(ownerLocator, recipient, amount);
+      // Send the token
+      const tx = await sendToken(telegramId, recipient, token, amount);
+
       await ctx.reply(
         `✅ *Transfer Successful!*\n\n` +
-        `📤 Sent: \`${amount}\` USDC\n` +
+        `📤 Sent: \`${amount}\` ${token}\n` +
         `📍 To: \`${recipient}\`\n\n` +
         `🔗 [View Transaction](${tx.explorerLink})`,
         { parse_mode: 'Markdown' }
       );
     } catch (err: any) {
-      await ctx.reply(`Send failed: ${err?.message ?? "unknown error"}`);
+      await ctx.reply(`❌ Send failed: ${err?.message ?? "unknown error"}`);
     }
   });
 }

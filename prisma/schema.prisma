@@ -10,19 +10,21 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model TelegramUser {
-  id           Int       @id @default(autoincrement())
-  telegramId   BigInt    @unique
-  username     String?
-  firstName    String?
-  lastName     String?
+  id                   Int       @id @default(autoincrement())
+  telegramId           BigInt    @unique
+  username             String?
+  firstName            String?
+  lastName             String?
 
-  walletPubKey String    @unique 
-  encryptedSeed String?
+  // Single wallet per user
+  walletPubKey         String    @unique
+  encryptedPrivateKey  String    // Encrypted secret key stored securely
 
-  createdAt    DateTime  @default(now())
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }

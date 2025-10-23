@@ -1,26 +1,17 @@
 import { Telegraf } from "telegraf";
 import { getPublicKeyForUser, ensureDbUserWithWallet } from "../services/solana";
-
-function resolveDefaultChain() { return "solana" as const; }
-
-function buildOwnerLocatorFromTelegram(ctx: any): string {
-  const userId = ctx.from?.id ?? "unknown";
-  return `telegram:${userId}`;
-}
+import { getUserDataFromContext } from "../utils/telegram";
 
 export function registerWalletCreate(bot: Telegraf) {
   bot.command("wallet_create", async (ctx) => {
     try {
-      const ownerLocator = buildOwnerLocatorFromTelegram(ctx);
-      resolveDefaultChain();
-      const pubkey = getPublicKeyForUser(ownerLocator);
-      await ensureDbUserWithWallet({
-        telegramId: BigInt(ctx.from?.id ?? 0),
-        username: ctx.from?.username ?? null,
-        firstName: ctx.from?.first_name ?? null,
-        lastName: ctx.from?.last_name ?? null,
-        ownerLocator,
-      });
+      const userData = getUserDataFromContext(ctx);
+
+      // Ensure user exists in DB with wallet
+      await ensureDbUserWithWallet(userData);
+
+      const pubkey = await getPublicKeyForUser(userData.telegramId);
+
       await ctx.reply(
         `🎉 *Wallet Created!*\n\n` +
         `📍 Address:\n\`${pubkey.toBase58()}\`\n\n` +
@@ -28,7 +19,7 @@ export function registerWalletCreate(bot: Telegraf) {
         { parse_mode: 'Markdown' }
       );
     } catch (err: any) {
-      await ctx.reply(`Failed to create wallet: ${err?.message ?? "unknown error"}`);
+      await ctx.reply(`❌ Failed to create wallet: ${err?.message ?? "unknown error"}`);
     }
   });
 }
