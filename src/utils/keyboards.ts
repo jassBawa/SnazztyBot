@@ -58,6 +58,7 @@ export const swapOptionsKeyboard = () => {
       Markup.button.callback("🟢 Buy Token", "ACTION_SWAP_BUY"),
       Markup.button.callback("🔴 Sell Token", "ACTION_SWAP_SELL"),
     ],
+    [Markup.button.callback("🔄 Swap Tokens", "ACTION_SWAP_TOKEN_TO_TOKEN")],
     [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
   ]);
 };
