@@ -1,12 +1,8 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
   provider = "prisma-client-js"
-  // output   = "../src/generated/prisma"
+  output   = "../src/generated/client"
 }
 
 datasource db {
@@ -27,4 +23,79 @@ model TelegramUser {
 
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
+   dcaStrategies  DcaStrategy[]
+}
+
+model DcaStrategy{
+   id                String        @id @default(uuid())
+  userId            Int
+  user              TelegramUser  @relation(fields: [userId], references: [id])
+
+  baseToken         String
+  targetToken       String 
+  amountPerInterval Decimal       @db.Decimal(65, 30)
+  frequency         DcaFrequency       
+  nextExecutionTime DateTime
+  status            DcaStatus     @default(ACTIVE)
+
+  totalInvested     Decimal       @db.Decimal(65, 30) @default(0)
+  executionCount    Int           @default(0)
+  averageBuyPrice   Decimal?      @db.Decimal(65, 30)
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  executions        DcaExecution[]
+
+}
+
+model DcaExecution {
+  id                String      @id @default(uuid())
+  strategyId        String
+  strategy          DcaStrategy @relation(fields: [strategyId], references: [id])
+
+  executionTime     DateTime    @default(now())
+  amountInvested    Decimal     @db.Decimal(65, 30)
+  tokensReceived    Decimal     @db.Decimal(65, 30)
+  executionPrice    Decimal     @db.Decimal(65, 30)  // price per token during execution
+
+  txHash            String?     // blockchain/exchange transaction hash
+  status            ExecutionStatus @default(SUCCESS)
+  errorMessage      String?     // useful for debugging failed executions
+
+  createdAt         DateTime    @default(now())
+}
+
+enum DcaStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum ExecutionStatus {
+  SUCCESS
+  FAILED
+  PENDING
+}
+
+enum DcaFrequency {
+  TEST
+  HOURLY
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+model TokenPair {
+  id          String   @id @default(uuid())
+  baseToken   String   // e.g., USDC
+  baseMint    String
+  targetToken String   // e.g., BONK
+  targetMint   String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@unique([baseToken, targetToken], name: "baseToken_targetToken")
+
 }
