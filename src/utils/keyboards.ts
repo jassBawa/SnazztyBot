@@ -15,9 +15,12 @@ export const mainMenuKeyboard = () => {
       Markup.button.callback("🟢 Buy Token", "ACTION_SWAP_BUY"),
       Markup.button.callback("🔴 Sell Token", "ACTION_SWAP_SELL"),
     ],
+    [
+      Markup.button.callback("📊 Setup DCA", "ACTION_DCA_SETUP"),
+      Markup.button.callback("📋 My DCA", "ACTION_DCA_LIST"),
+    ],
     [Markup.button.callback("📤 Send Tokens", "ACTION_WALLET_SEND")],
-    [Markup.button.callback("ℹ️ Who am I", "ACTION_WHOAMI")],
-    [Markup.button.callback("🔄 Refresh", "ACTION_REFRESH")],
+    [Markup.button.callback("ℹ️ About", "ACTION_ABOUT")],
   ]);
 };
 
