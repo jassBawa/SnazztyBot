@@ -169,6 +169,11 @@ export function buildStrategyListMessage(strategies: any[]): string {
     message += `   Amount: ${strategy.amountPerInterval} ${strategy.baseToken}\n`;
     message += `   Frequency: ${getFrequencyDisplay(strategy.frequency)}\n`;
     message += `   Status: ${strategy.status}\n`;
+
+    if (strategy.consecutiveFailures > 0) {
+      message += `   ⚠️ Consecutive Failures: ${strategy.consecutiveFailures}/3\n`;
+    }
+
     message += `   Total Invested: ${strategy.totalInvested} ${strategy.baseToken}\n`;
     message += `   Executions: ${strategy.executionCount}\n`;
     message += `   Next Run: ${new Date(strategy.nextExecutionTime).toLocaleString()}\n\n`;

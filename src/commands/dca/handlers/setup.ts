@@ -1,8 +1,3 @@
-/**
- * DCA Setup Flow Handlers
- * Handles the step-by-step DCA strategy creation process
- */
-
 import { Telegraf } from "telegraf";
 import { getAllActiveTokenPairs, createDcaStrategy, getUserByTelegramId } from "../../../services/db";
 import { backToMainKeyboard } from "../../../utils/keyboards";
@@ -18,16 +13,8 @@ import {
   buildSuccessMessage
 } from "../messages";
 
-/**
- * Register setup flow handlers
- * @param bot - Telegraf bot instance
- */
 export function registerSetupHandlers(bot: Telegraf) {
 
-  /**
-   * STEP 2: Handle token pair selection
-   * Updates session and prompts for amount input
-   */
   bot.action(/^DCA_SELECT_PAIR_(.+)$/, async (ctx) => {
     try {
       const pairId = ctx.match[1];
@@ -39,7 +26,6 @@ export function registerSetupHandlers(bot: Telegraf) {
         return;
       }
 
-      // Fetch and validate token pair
       const tokenPairs = await getAllActiveTokenPairs();
       const selectedPair = tokenPairs.find(p => p.id === pairId);
 
@@ -48,7 +34,6 @@ export function registerSetupHandlers(bot: Telegraf) {
         return;
       }
 
-      // Update session with selected pair
       session.tokenPairId = pairId;
       session.baseToken = selectedPair.baseToken;
       session.targetToken = selectedPair.targetToken;
@@ -66,15 +51,10 @@ export function registerSetupHandlers(bot: Telegraf) {
     }
   });
 
-  /**
-   * STEP 3: Handle text input for amount
-   * Validates amount and prompts for frequency selection
-   */
   bot.on("text", async (ctx, next) => {
     const sessionKey = getSessionKey(ctx);
     const session = getSession(sessionKey);
 
-    // Pass to next handler if no active DCA session
     if (!session) return next();
     if (ctx.message.text.startsWith("/")) return next();
 
@@ -83,18 +63,15 @@ export function registerSetupHandlers(bot: Telegraf) {
         const text = ctx.message.text.trim();
         const amount = parseFloat(text);
 
-        // Validate amount
         if (isNaN(amount) || amount <= 0) {
           await ctx.reply("❌ Invalid amount. Please send a valid positive number.");
           return;
         }
 
-        // Update session
         session.amountPerInterval = amount.toString();
         session.step = "selecting_frequency";
         setSession(sessionKey, session);
 
-        // Show frequency selection
         const keyboard = buildFrequencyKeyboard(sessionKey);
         const message = buildFrequencyPrompt(amount, session.baseToken!);
         await ctx.reply(message, { parse_mode: "Markdown", ...keyboard });
@@ -106,10 +83,6 @@ export function registerSetupHandlers(bot: Telegraf) {
     }
   });
 
-  /**
-   * STEP 4: Handle frequency selection
-   * Shows confirmation screen with all details
-   */
   bot.action(/^DCA_FREQ_(.+)_(.+)$/, async (ctx) => {
     try {
       const frequency = ctx.match[1] as DcaFrequency;
@@ -121,12 +94,10 @@ export function registerSetupHandlers(bot: Telegraf) {
         return;
       }
 
-      // Update session
       session.frequency = frequency;
       session.step = "confirming";
       setSession(sessionKey, session);
 
-      // Build confirmation screen
       const confirmMessage = buildConfirmationMessage(session, frequency);
       const confirmKeyboard = buildConfirmationKeyboard(sessionKey);
 
@@ -142,10 +113,6 @@ export function registerSetupHandlers(bot: Telegraf) {
     }
   });
 
-  /**
-   * STEP 5: Handle confirmation
-   * Creates DCA strategy in database
-   */
   bot.action(/^DCA_CONFIRM_(.+)$/, async (ctx) => {
     const sessionKey = ctx.match[1];
 
@@ -158,10 +125,8 @@ export function registerSetupHandlers(bot: Telegraf) {
         return;
       }
 
-      // Show loading state
       await safeEditOrReply(ctx, "⏳ Creating your DCA strategy...");
 
-      // Verify user exists
       const user = await getUserByTelegramId(telegramId);
       if (!user) {
         await safeEditOrReply(
@@ -174,7 +139,6 @@ export function registerSetupHandlers(bot: Telegraf) {
         return;
       }
 
-      // Create strategy in database
       const nextExecutionTime = calculateNextExecutionTime(session.frequency!);
       const strategy = await createDcaStrategy({
         userId: user.id,
@@ -185,7 +149,6 @@ export function registerSetupHandlers(bot: Telegraf) {
         nextExecutionTime,
       });
 
-      // Show success message
       const successMessage = buildSuccessMessage(strategy);
       await safeEditOrReply(ctx, successMessage, {
         parse_mode: "Markdown",
@@ -206,9 +169,6 @@ export function registerSetupHandlers(bot: Telegraf) {
     }
   });
 
-  /**
-   * Handle cancellation during setup
-   */
   bot.action(/^DCA_CANCEL_(.+)$/, async (ctx) => {
     const sessionKey = ctx.match[1];
     clearSession(sessionKey);
@@ -219,9 +179,6 @@ export function registerSetupHandlers(bot: Telegraf) {
     await ctx.answerCbQuery("Cancelled");
   });
 
-  /**
-   * Handle /cancel command during setup
-   */
   bot.command("cancel", async (ctx) => {
     const sessionKey = getSessionKey(ctx);
     const session = getSession(sessionKey);

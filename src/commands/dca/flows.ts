@@ -1,27 +1,15 @@
-/**
- * DCA Core Flow Functions
- * High-level functions for initiating DCA flows
- */
-
 import { getTelegramId } from "../../utils/telegram";
 import { getAllActiveTokenPairs, getUserByTelegramId, getUserDcaStrategies } from "../../services/db";
 import { backToMainKeyboard } from "../../utils/keyboards";
 import { getSessionKey, setSession, clearSession } from "./session";
 import { buildTokenPairSelection, buildStrategyListMessage, buildStrategyManagementKeyboard } from "./messages";
 
-/**
- * Start DCA setup flow
- * STEP 1: Show token pair selection
- * @param ctx - Telegram context
- */
 export async function setupDcaFlow(ctx: any): Promise<void> {
   try {
     const sessionKey = getSessionKey(ctx);
 
-    // Initialize new session
     setSession(sessionKey, { step: "selecting_pair" });
 
-    // Fetch available token pairs
     const tokenPairs = await getAllActiveTokenPairs();
 
     if (tokenPairs.length === 0) {
@@ -42,16 +30,10 @@ export async function setupDcaFlow(ctx: any): Promise<void> {
   }
 }
 
-/**
- * Show user's DCA strategies
- * MANAGEMENT: View and manage existing strategies
- * @param ctx - Telegram context
- */
 export async function showDcaList(ctx: any): Promise<void> {
   try {
     const telegramId = getTelegramId(ctx);
 
-    // Verify user exists
     const user = await getUserByTelegramId(telegramId);
     if (!user) {
       await ctx.reply(

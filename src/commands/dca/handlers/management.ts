@@ -1,21 +1,9 @@
-/**
- * DCA Strategy Management Handlers
- * Handles pause, resume, and cancel operations for existing strategies
- */
-
 import { Telegraf, Markup } from "telegraf";
 import { pauseDcaStrategy, resumeDcaStrategy, cancelDcaStrategy } from "../../../services/db";
 import { backToMainKeyboard } from "../../../utils/keyboards";
 
-/**
- * Register management handlers
- * @param bot - Telegraf bot instance
- */
 export function registerManagementHandlers(bot: Telegraf) {
 
-  /**
-   * Handle pause/resume strategy
-   */
   bot.action(/^DCA_(PAUSE|RESUME)_(.+)$/, async (ctx) => {
     try {
       const action = ctx.match[1];
@@ -36,10 +24,6 @@ export function registerManagementHandlers(bot: Telegraf) {
     }
   });
 
-  /**
-   * Handle cancel strategy request
-   * Shows confirmation dialog
-   */
   bot.action(/^DCA_CANCEL_STRATEGY_(.+)$/, async (ctx) => {
     try {
       const strategyId = ctx.match[1];
@@ -63,9 +47,6 @@ export function registerManagementHandlers(bot: Telegraf) {
     }
   });
 
-  /**
-   * Confirm strategy cancellation
-   */
   bot.action(/^DCA_CONFIRM_CANCEL_(.+)$/, async (ctx) => {
     try {
       const strategyId = ctx.match[1];
@@ -83,9 +64,6 @@ export function registerManagementHandlers(bot: Telegraf) {
     }
   });
 
-  /**
-   * Keep strategy (cancel the cancellation)
-   */
   bot.action("DCA_KEEP_STRATEGY", async (ctx) => {
     await ctx.editMessageText(
       `✅ Strategy kept.\n\nUse /dca\\_list to view your strategies.`,
