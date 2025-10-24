@@ -6,6 +6,7 @@ import { registerWalletBalance } from "./wallet.balance";
 import { registerWalletSend } from "./wallet.send";
 import { registerSwapCommands } from "./swap";
 import { registerQuickCommands } from "./quick";
+import { registerDcaCommands } from "./dca";
 
 export function registerCommands(bot: Telegraf) {
   registerStart(bot);
@@ -15,6 +16,7 @@ export function registerCommands(bot: Telegraf) {
   registerWalletSend(bot);
   registerSwapCommands(bot);
   registerQuickCommands(bot);
+  registerDcaCommands(bot);
 }
 
 

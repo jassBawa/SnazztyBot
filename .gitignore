@@ -33,3 +33,5 @@ data/wallets.json
 # Caches
 .turbo/
 .cache/
+
+generated

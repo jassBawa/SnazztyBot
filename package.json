@@ -4,30 +4,34 @@
   "description": "",
   "main": "index.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "build": "tsc"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.12.4",
   "devDependencies": {
+    "@types/bn.js": "^5.2.0",
+    "@types/node": "^24.9.1",
     "nodemon": "^3.1.10",
-    "prisma": "^6.16.2",
-    "ts-node": "^10.9.2"
+    "prisma": "^6.18.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@prisma/client": "6.16.2",
+    "@prisma/client": "6.18.0",
     "@raydium-io/raydium-sdk-v2": "0.2.30-alpha",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.95.3",
-    "@types/bn.js": "^5.2.0",
     "bn.js": "^5.2.2",
     "decimal.js": "^10.6.0",
     "dotenv": "^17.2.2",
-    "telegraf": "^4.16.3",
-    "viem": "^2.37.8"
+    "node-cron": "^4.2.1",
+    "telegraf": "^4.16.3"
   }
 }

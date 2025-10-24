@@ -137,6 +137,39 @@ export async function getTokenDecimals(tokenMint: string): Promise<number> {
 }
 
 /**
+ * Check if a token mint uses Token-2022 program
+ */
+export async function isToken2022(tokenMint: string): Promise<boolean> {
+  try {
+    const connection = getConnection();
+    const mintPubkey = new PublicKey(tokenMint);
+    const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+
+    const accountInfo = await connection.getAccountInfo(mintPubkey);
+
+    if (!accountInfo) {
+      return false;
+    }
+
+    // Check if the owner program is Token-2022
+    return accountInfo.owner.equals(TOKEN_2022_PROGRAM_ID);
+  } catch (error) {
+    console.error("[SOLANA] Error checking Token-2022:", error);
+    return false; // Default to regular SPL token
+  }
+}
+
+/**
+ * Get token program ID for a mint
+ */
+export async function getTokenProgramId(tokenMint: string): Promise<string> {
+  const is2022 = await isToken2022(tokenMint);
+  return is2022
+    ? "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    : "TokenkGPmanGNXRCf56LSXt8y6LYouGxvPjSzkMGQJx";
+}
+
+/**
  * Get SPL token balance for a specific token mint
  */
 export async function getTokenBalance(

@@ -20,6 +20,9 @@ bot.help((ctx) =>
     `/sell - Sell tokens quickly ⚡\\n` +
     `/exchange - Token-to-token swap 🔄\\n` +
     `/cancel - Cancel current swap\\n\\n` +
+    `📊 *DCA (Auto-Invest):*\\n` +
+    `/dca - Setup automated DCA strategy\\n` +
+    `/dca_list - View & manage your DCA strategies\\n\\n` +
     `🛠️ *Utilities:*\\n` +
     `/refresh or /r - Refresh data\\n` +
     `/about - Your info\\n` +
@@ -42,7 +45,9 @@ bot.telegram.setMyCommands([
   { command: 'buy', description: '🟢 Buy tokens quickly' },
   { command: 'sell', description: '🔴 Sell tokens quickly' },
   { command: 'exchange', description: '🔄 Token-to-token swap' },
-  { command: 'cancel', description: '❌ Cancel current swap' },
+  { command: 'dca', description: '📊 Setup automated DCA strategy' },
+  { command: 'dca_list', description: '📋 View & manage DCA strategies' },
+  { command: 'cancel', description: '❌ Cancel current operation' },
   { command: 'refresh', description: '🔄 Refresh data' },
   { command: 'network', description: '🌐 Network status' },
   { command: 'about', description: 'ℹ️ About this bot' },

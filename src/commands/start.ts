@@ -62,7 +62,7 @@ export function registerStart(bot: Telegraf) {
     );
   });
 
-  bot.action("ACTION_WHOAMI", async (ctx) => {
+  bot.action("ACTION_ABOUT", async (ctx) => {
     await ctx.reply(
       `ℹ️ *About SnazztyBot*\n\n` +
       `I am your Solana wallet assistant! 🤖\n\n` +
@@ -73,18 +73,6 @@ export function registerStart(bot: Telegraf) {
       `• Secure encrypted storage\n\n` +
       `Built with ❤️ for the Solana ecosystem`,
       { parse_mode: 'Markdown', ...backToMainKeyboard() }
-    );
-  });
-
-  bot.action("ACTION_REFRESH", async (ctx) => {
-    const telegramId = getTelegramId(ctx);
-    const pubkey = await getPublicKeyForUser(telegramId);
-
-    ctx.reply(
-      `🔄 *Refreshed!*\n\nYour Solana wallet:\n\n` +
-      `📍 Address:\n\`${pubkey.toBase58()}\`\n\n` +
-      `Use the buttons below:`,
-      { parse_mode: 'Markdown', ...mainMenuKeyboard() }
     );
   });
 

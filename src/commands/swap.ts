@@ -2,15 +2,17 @@ import { Telegraf, Markup } from "telegraf";
 import { getOrCreateUserKeypair, getBalances, isValidSolanaAddress, getTokenBalance } from "../services/solana";
 import { getTelegramId } from "../utils/telegram";
 import { backToMainKeyboard, swapOptionsKeyboard } from "../utils/keyboards";
-import { swapSolForToken, swapTokenForSol, previewSolForToken, previewTokenForSol } from "../services/raydium";
+import { swapSolForToken, swapTokenForSol, previewSolForToken, previewTokenForSol, swapTokenForToken, previewTokenForToken } from "../services/raydium";
 
 // Store user swap sessions
 interface SwapSession {
-  action: "buy" | "sell";
-  tokenAddress?: string;
+  action: "buy" | "sell" | "exchange";
+  tokenAddress?: string; // For buy/sell, this is the token. For exchange, this is the input token
+  outputTokenAddress?: string; // For exchange, this is the output token
   amount?: string;
-  tokenBalance?: number; // For sell action - store available token balance
-  step: "awaiting_token" | "awaiting_amount" | "confirming";
+  tokenBalance?: number; // Store available token balance
+  outputTokenSymbol?: string; // For display purposes
+  step: "awaiting_token" | "awaiting_output_token" | "awaiting_amount" | "confirming";
 }
 
 const userSessions = new Map<string, SwapSession>();
@@ -60,15 +62,128 @@ export function registerSwapCommands(bot: Telegraf) {
     );
   });
 
+  // Token-to-token swap action
+  bot.action("ACTION_SWAP_TOKEN_TO_TOKEN", async (ctx) => {
+    const telegramId = getTelegramId(ctx);
+    const sessionKey = telegramId.toString();
+
+    // Initialize exchange session
+    userSessions.set(sessionKey, {
+      action: "exchange",
+      step: "awaiting_token",
+    });
+
+    await ctx.reply(
+      `🔄 *Token-to-Token Swap*\n\n` +
+        `Please send the *input token* contract address (the token you want to swap FROM).\n\n` +
+        `Example:\n` +
+        `\`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\`\n\n` +
+        `Or send /cancel to cancel this operation.`,
+      { parse_mode: "Markdown", ...backToMainKeyboard() }
+    );
+  });
+
   // Handle swap command
   bot.command("swap", async (ctx) => {
     await ctx.reply(
       `🔄 *Token Swap*\n\n` +
         `Choose an action:\n\n` +
         `🟢 *Buy Token* - Swap SOL for a token\n` +
-        `🔴 *Sell Token* - Swap a token for SOL`,
+        `🔴 *Sell Token* - Swap a token for SOL\n` +
+        `🔄 *Swap Tokens* - Swap one token for another\n\n` +
+        `💡 *Quick commands:*\n` +
+        `/buy - Buy tokens directly\n` +
+        `/sell - Sell tokens directly\n` +
+        `/exchange - Token-to-token swap\n` +
+        `/cancel - Cancel current swap`,
       { parse_mode: "Markdown", ...swapOptionsKeyboard() }
     );
+  });
+
+  // Direct buy command
+  bot.command("buy", async (ctx) => {
+    const telegramId = getTelegramId(ctx);
+    const sessionKey = telegramId.toString();
+
+    // Initialize buy session
+    userSessions.set(sessionKey, {
+      action: "buy",
+      step: "awaiting_token",
+    });
+
+    await ctx.reply(
+      `🟢 *Buy Token*\n\n` +
+        `Please send the token contract address you want to buy.\n\n` +
+        `You will swap SOL for this token.\n\n` +
+        `Example:\n` +
+        `\`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\`\n\n` +
+        `Or send /cancel to cancel this operation.`,
+      { parse_mode: "Markdown", ...backToMainKeyboard() }
+    );
+  });
+
+  // Direct sell command
+  bot.command("sell", async (ctx) => {
+    const telegramId = getTelegramId(ctx);
+    const sessionKey = telegramId.toString();
+
+    // Initialize sell session
+    userSessions.set(sessionKey, {
+      action: "sell",
+      step: "awaiting_token",
+    });
+
+    await ctx.reply(
+      `🔴 *Sell Token*\n\n` +
+        `Please send the token contract address you want to sell.\n\n` +
+        `You will swap this token for SOL.\n\n` +
+        `Example:\n` +
+        `\`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\`\n\n` +
+        `Or send /cancel to cancel this operation.`,
+      { parse_mode: "Markdown", ...backToMainKeyboard() }
+    );
+  });
+
+  // Direct exchange command (token-to-token)
+  bot.command("exchange", async (ctx) => {
+    const telegramId = getTelegramId(ctx);
+    const sessionKey = telegramId.toString();
+
+    // Initialize exchange session
+    userSessions.set(sessionKey, {
+      action: "exchange",
+      step: "awaiting_token",
+    });
+
+    await ctx.reply(
+      `🔄 *Token-to-Token Swap*\n\n` +
+        `Please send the *input token* contract address (the token you want to swap FROM).\n\n` +
+        `Example:\n` +
+        `\`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\`\n\n` +
+        `Or send /cancel to cancel this operation.`,
+      { parse_mode: "Markdown", ...backToMainKeyboard() }
+    );
+  });
+
+  // Cancel command
+  bot.command("cancel", async (ctx) => {
+    const telegramId = getTelegramId(ctx);
+    const sessionKey = telegramId.toString();
+
+    if (userSessions.has(sessionKey)) {
+      userSessions.delete(sessionKey);
+      await ctx.reply(
+        `❌ Swap cancelled.\n\n` +
+          `Use /swap, /buy, or /sell to start a new swap.`,
+        { ...backToMainKeyboard() }
+      );
+    } else {
+      await ctx.reply(
+        `ℹ️ No active swap to cancel.\n\n` +
+          `Use /swap, /buy, or /sell to start a swap.`,
+        { ...backToMainKeyboard() }
+      );
+    }
   });
 
   // Cancel swap action
@@ -84,17 +199,17 @@ export function registerSwapCommands(bot: Telegraf) {
   });
 
   // Handle text messages for swap flow
-  bot.on("text", async (ctx) => {
+  bot.on("text", async (ctx, next) => {
     const telegramId = getTelegramId(ctx);
     const sessionKey = telegramId.toString();
     const session = userSessions.get(sessionKey);
 
-    if (!session) return; // No active session
+    if (!session) return next(); // No active swap session, pass to next handler
 
     const text = ctx.message.text.trim();
 
     // Check if it's a command
-    if (text.startsWith("/")) return;
+    if (text.startsWith("/")) return next();
 
     try {
       if (session.step === "awaiting_token") {
@@ -107,8 +222,8 @@ export function registerSwapCommands(bot: Telegraf) {
         // Update session
         session.tokenAddress = text;
 
-        // For sell action, check if user holds this token
-        if (session.action === "sell") {
+        // For sell or exchange action, check if user holds this token
+        if (session.action === "sell" || session.action === "exchange") {
           const kp = await getOrCreateUserKeypair(telegramId);
           const tokenBalance = await getTokenBalance(kp.publicKey, text);
 
@@ -126,15 +241,31 @@ export function registerSwapCommands(bot: Telegraf) {
           // Store token balance in session
           session.tokenBalance = tokenBalance.amount;
 
-          await ctx.reply(
-            `✅ Token address validated!\n\n` +
-              `Token: \`${text}\`\n` +
-              `Your balance: ${tokenBalance.amount.toFixed(6)} tokens\n\n` +
-              `Now, how many tokens do you want to sell?\n\n` +
-              `Example: \`0.1\` or \`10\`\n\n` +
-              `Or send /cancel to cancel.`,
-            { parse_mode: "Markdown" }
-          );
+          if (session.action === "sell") {
+            await ctx.reply(
+              `✅ Token address validated!\n\n` +
+                `Token: \`${text}\`\n` +
+                `Your balance: ${tokenBalance.amount.toFixed(6)} tokens\n\n` +
+                `Now, how many tokens do you want to sell?\n\n` +
+                `Example: \`0.1\` or \`10\`\n\n` +
+                `Or send /cancel to cancel.`,
+              { parse_mode: "Markdown" }
+            );
+            session.step = "awaiting_amount";
+          } else {
+            // For exchange, ask for output token
+            await ctx.reply(
+              `✅ Input token validated!\n\n` +
+                `Token: \`${text}\`\n` +
+                `Your balance: ${tokenBalance.amount.toFixed(6)} tokens\n\n` +
+                `Now, please send the *output token* contract address (the token you want to receive).\n\n` +
+                `Example:\n` +
+                `\`So11111111111111111111111111111111111111112\` (for SOL)\n\n` +
+                `Or send /cancel to cancel.`,
+              { parse_mode: "Markdown" }
+            );
+            session.step = "awaiting_output_token";
+          }
         } else {
           // For buy action, just confirm the address
           await ctx.reply(
@@ -145,7 +276,35 @@ export function registerSwapCommands(bot: Telegraf) {
               `Or send /cancel to cancel.`,
             { parse_mode: "Markdown" }
           );
+          session.step = "awaiting_amount";
         }
+
+        userSessions.set(sessionKey, session);
+      } else if (session.step === "awaiting_output_token") {
+        // Handle output token for exchange action
+        if (!isValidSolanaAddress(text)) {
+          await ctx.reply("❌ Invalid token address. Please send a valid Solana token address.");
+          return;
+        }
+
+        // Validate that output token is different from input token
+        if (text === session.tokenAddress) {
+          await ctx.reply("❌ Output token must be different from input token. Please send a different token address.");
+          return;
+        }
+
+        // Update session
+        session.outputTokenAddress = text;
+
+        await ctx.reply(
+          `✅ Output token received!\n\n` +
+            `Output Token: \`${text}\`\n\n` +
+            `Now, how many INPUT tokens do you want to swap?\n\n` +
+            `Available: ${session.tokenBalance?.toFixed(6)} tokens\n\n` +
+            `Example: \`0.1\` or \`10\`\n\n` +
+            `Or send /cancel to cancel.`,
+          { parse_mode: "Markdown" }
+        );
 
         session.step = "awaiting_amount";
         userSessions.set(sessionKey, session);
@@ -175,12 +334,12 @@ export function registerSwapCommands(bot: Telegraf) {
             return;
           }
         } else {
-          // Check token balance for sell
+          // Check token balance for sell and exchange
           const tokenBalance = session.tokenBalance || 0;
           if (amount > tokenBalance) {
             await ctx.reply(
               `❌ Insufficient token balance!\n\n` +
-                `You want to sell: ${amount} tokens\n` +
+                `You want to swap: ${amount} tokens\n` +
                 `Your balance: ${tokenBalance.toFixed(6)} tokens\n\n` +
                 `Please enter a lower amount.`
             );
@@ -194,7 +353,7 @@ export function registerSwapCommands(bot: Telegraf) {
         userSessions.set(sessionKey, session);
 
         // Show confirmation with buttons
-        const actionEmoji = session.action === "buy" ? "🟢" : "🔴";
+        const actionEmoji = session.action === "buy" ? "🟢" : session.action === "sell" ? "🔴" : "🔄";
         const fromToken = session.action === "buy" ? "SOL" : "Token";
 
         const confirmKeyboard = Markup.inlineKeyboard([
@@ -219,12 +378,24 @@ export function registerSwapCommands(bot: Telegraf) {
             if (preview.routeType && preview.poolIds) {
               routeInfo = `\nRoute: ${preview.routeType}\nPools: ${preview.poolIds.substring(0, 40)}...`;
             }
-          } else {
+          } else if (session.action === "sell") {
             const preview = await previewTokenForSol({
               tokenMint: session.tokenAddress!,
               tokenAmount: amount,
             });
             expectedOutput = `~${preview.outputAmount} SOL`;
+            priceImpact = `${preview.priceImpact}%`;
+            if (preview.routeType && preview.poolIds) {
+              routeInfo = `\nRoute: ${preview.routeType}\nPools: ${preview.poolIds.substring(0, 40)}...`;
+            }
+          } else {
+            // Exchange action
+            const preview = await previewTokenForToken({
+              inputTokenMint: session.tokenAddress!,
+              outputTokenMint: session.outputTokenAddress!,
+              inputTokenAmount: amount,
+            });
+            expectedOutput = `~${preview.outputAmount} Token`;
             priceImpact = `${preview.priceImpact}%`;
             if (preview.routeType && preview.poolIds) {
               routeInfo = `\nRoute: ${preview.routeType}\nPools: ${preview.poolIds.substring(0, 40)}...`;
@@ -240,19 +411,27 @@ export function registerSwapCommands(bot: Telegraf) {
           ? `Available: ${solBalance} SOL`
           : `Available: ${session.tokenBalance?.toFixed(6)} tokens`;
 
-        await ctx.reply(
-          `${actionEmoji} *Confirm Swap*\n\n` +
-            `Action: ${session.action.toUpperCase()}\n` +
-            `Token: \`${session.tokenAddress}\`\n` +
+        let confirmMessage = `${actionEmoji} *Confirm Swap*\n\n` +
+          `Action: ${session.action.toUpperCase()}\n`;
+
+        if (session.action === "exchange") {
+          confirmMessage += `Input Token: \`${session.tokenAddress}\`\n` +
+            `Output Token: \`${session.outputTokenAddress}\`\n` +
             `${balanceInfo}\n` +
-            `Amount to swap: ${amount} ${fromToken}\n` +
-            `Expected output: ${expectedOutput}\n` +
-            `Price impact: ${priceImpact}${routeInfo}\n\n` +
-            `⚠️ *Note:* Actual amount may vary due to slippage.\n` +
-            `⚠️ Pool fees and price impact apply.\n\n` +
-            `Click Confirm to execute the swap.`,
-          { parse_mode: "Markdown", ...confirmKeyboard }
-        );
+            `Amount to swap: ${amount} input tokens\n`;
+        } else {
+          confirmMessage += `Token: \`${session.tokenAddress}\`\n` +
+            `${balanceInfo}\n` +
+            `Amount to swap: ${amount} ${fromToken}\n`;
+        }
+
+        confirmMessage += `Expected output: ${expectedOutput}\n` +
+          `Price impact: ${priceImpact}${routeInfo}\n\n` +
+          `⚠️ *Note:* Actual amount may vary due to slippage.\n` +
+          `⚠️ Pool fees and price impact apply.\n\n` +
+          `Click Confirm to execute the swap.`;
+
+        await ctx.reply(confirmMessage, { parse_mode: "Markdown", ...confirmKeyboard });
       }
     } catch (error: any) {
       await ctx.reply(`❌ Error: ${error?.message ?? "Unknown error"}`);
@@ -294,7 +473,7 @@ export function registerSwapCommands(bot: Telegraf) {
           slippage: 0.01, // 1% slippage (decimal format)
         });
         console.log("[SWAP] BUY result:", result);
-      } else {
+      } else if (session.action === "sell") {
         console.log("[SWAP] Executing SELL: Token -> SOL");
         // Sell token for SOL
         result = await swapTokenForSol({
@@ -304,18 +483,35 @@ export function registerSwapCommands(bot: Telegraf) {
           slippage: 0.01, // 1% slippage (decimal format)
         });
         console.log("[SWAP] SELL result:", result);
+      } else {
+        console.log("[SWAP] Executing EXCHANGE: Token -> Token");
+        // Exchange token for another token
+        result = await swapTokenForToken({
+          userKeypair,
+          inputTokenMint: session.tokenAddress!,
+          outputTokenMint: session.outputTokenAddress!,
+          inputTokenAmount: amount,
+          slippage: 0.01, // 1% slippage (decimal format)
+        });
+        console.log("[SWAP] EXCHANGE result:", result);
       }
 
       console.log("[SWAP] Transaction successful! TX:", result.signature);
 
-      const actionEmoji = session.action === "buy" ? "🟢" : "🔴";
-      await ctx.editMessageText(
-        `✅ ${actionEmoji} *Swap Successful!*\n\n` +
-          `Swapped: ${result.inputAmount} ${session.action === "buy" ? "SOL" : "Token"}\n` +
-          `Received: ${result.outputAmount} ${session.action === "buy" ? "Token" : "SOL"}\n\n` +
-          `🔗 [View Transaction](${result.explorerLink})`,
-        { parse_mode: "Markdown", ...backToMainKeyboard() }
-      );
+      const actionEmoji = session.action === "buy" ? "🟢" : session.action === "sell" ? "🔴" : "🔄";
+      let swapMessage = `✅ ${actionEmoji} *Swap Successful!*\n\n`;
+
+      if (session.action === "exchange") {
+        swapMessage += `Swapped: ${result.inputAmount} Input Token\n` +
+          `Received: ${result.outputAmount} Output Token\n\n`;
+      } else {
+        swapMessage += `Swapped: ${result.inputAmount} ${session.action === "buy" ? "SOL" : "Token"}\n` +
+          `Received: ${result.outputAmount} ${session.action === "buy" ? "Token" : "SOL"}\n\n`;
+      }
+
+      swapMessage += `🔗 [View Transaction](${result.explorerLink})`;
+
+      await ctx.editMessageText(swapMessage, { parse_mode: "Markdown", ...backToMainKeyboard() });
 
       // Clear session
       userSessions.delete(sessionKey);

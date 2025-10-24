@@ -8,14 +8,13 @@ import {
   TokenAmount,
   toApiV3Token,
 } from "@raydium-io/raydium-sdk-v2";
-import { getConnection, getTokenDecimals } from "./solana";
+import { getConnection, getTokenDecimals, isToken2022, getTokenProgramId } from "./solana";
 
 // Constants
 const SOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 const DEFAULT_SLIPPAGE = 0.01; // 1%
 const DEFAULT_TOKEN_DECIMALS = 9;
 const LAMPORTS_PER_SOL = 1_000_000_000;
-const TOKEN_PROGRAM_ID = "TokenkGPmanGNXRCf56LSXt8y6LYouGxvPjSzkMGQJx";
 
 // Types
 interface SwapResult {
@@ -129,11 +128,21 @@ async function getBestRoute(params: {
     outputMint,
   });
 
+  // Check if tokens are Token-2022
+  const isInputToken2022 = await isToken2022(inputMint.toBase58());
+  const isOutputToken2022 = await isToken2022(outputMint.toBase58());
+  const outputProgramId = await getTokenProgramId(outputMint.toBase58());
+
+  console.log("[RAYDIUM] Token program check:", {
+    input: { address: inputMint.toBase58(), isToken2022: isInputToken2022 },
+    output: { address: outputMint.toBase58(), isToken2022: isOutputToken2022, programId: outputProgramId },
+  });
+
   // Create token info
   const inputToken = new Token({
     mint: inputMint.toBase58(),
     decimals: inputDecimals,
-    isToken2022: false,
+    isToken2022: isInputToken2022,
   });
 
   const inputTokenAmount = new TokenAmount(inputToken, inputAmount);
@@ -157,7 +166,7 @@ async function getBestRoute(params: {
     outputToken: toApiV3Token({
       address: outputMint.toBase58(),
       decimals: outputDecimals,
-      programId: TOKEN_PROGRAM_ID,
+      programId: outputProgramId,
     }),
     chainTime: Math.floor(raydium.chainTimeData?.chainTime ?? Date.now() / 1000),
     slippage,
@@ -182,24 +191,36 @@ async function executeSwap(params: {
 }): Promise<string> {
   const { raydium, bestRoute, isDevnet } = params;
 
-  const programIds = getPoolProgramIds(isDevnet);
+  try {
+    const programIds = getPoolProgramIds(isDevnet);
 
-  const { execute } = await raydium.tradeV2.swap({
-    swapInfo: bestRoute,
-    txVersion: TxVersion.V0,
-    routeProgram: programIds.router,
-    ownerInfo: {
-      associatedOnly: true,
-      checkCreateATAOwner: true,
-    },
-    computeBudgetConfig: {
-      units: 600000,
-      microLamports: 100000,
-    },
-  });
+    console.log("[RAYDIUM] Preparing swap transaction...");
+    const { execute } = await raydium.tradeV2.swap({
+      swapInfo: bestRoute,
+      txVersion: TxVersion.V0,
+      routeProgram: programIds.router,
+      ownerInfo: {
+        associatedOnly: true,
+        checkCreateATAOwner: true,
+      },
+      computeBudgetConfig: {
+        units: 600000,
+        microLamports: 100000,
+      },
+    });
 
-  const { txIds } = await execute({ sendAndConfirm: true, sequentially: true });
-  return txIds[0];
+    console.log("[RAYDIUM] Executing transaction...");
+    const { txIds } = await execute({ sendAndConfirm: true, sequentially: true });
+    console.log("[RAYDIUM] Transaction IDs:", txIds);
+    return txIds[0];
+  } catch (error: any) {
+    console.error("[RAYDIUM] Execute swap error details:", error);
+    console.error("[RAYDIUM] Error type:", typeof error);
+    console.error("[RAYDIUM] Error message:", error?.message);
+    console.error("[RAYDIUM] Error stack:", error?.stack);
+    console.error("[RAYDIUM] Full error:", JSON.stringify(error, null, 2));
+    throw error;
+  }
 }
 
 /**
@@ -405,5 +426,117 @@ export async function previewTokenForSol(params: {
     inputAmount,
     inputDecimals,
     outputDecimals: DEFAULT_TOKEN_DECIMALS, // SOL is always 9 decimals
+  });
+}
+
+/**
+ * Swap token for another token using Raydium TradeV2 best route
+ * Automatically finds and uses the best price across all pool types (AMM, CLMM, CPMM)
+ */
+export async function swapTokenForToken(params: {
+  userKeypair: Keypair;
+  inputTokenMint: string;
+  outputTokenMint: string;
+  inputTokenAmount: number;
+  slippage?: number;
+}): Promise<SwapResult> {
+  const { userKeypair, inputTokenMint, outputTokenMint, inputTokenAmount, slippage = DEFAULT_SLIPPAGE } = params;
+
+  try {
+    console.log("[RAYDIUM] Starting token-to-token swap:", {
+      input: inputTokenMint,
+      output: outputTokenMint,
+      amount: inputTokenAmount,
+      slippage,
+    });
+
+    const raydium = await getRaydiumInstance(userKeypair);
+    const isDevnet = (process.env.SOLANA_CLUSTER || "devnet") === "devnet";
+
+    const inputMint = new PublicKey(inputTokenMint);
+    const outputMint = new PublicKey(outputTokenMint);
+
+    // Fetch actual token decimals for both tokens
+    const inputDecimals = await getTokenDecimals(inputTokenMint);
+    const outputDecimals = await getTokenDecimals(outputTokenMint);
+    console.log("[RAYDIUM] Input token decimals:", inputDecimals);
+    console.log("[RAYDIUM] Output token decimals:", outputDecimals);
+
+    const inputAmount = Math.floor(inputTokenAmount * Math.pow(10, inputDecimals)).toString();
+    console.log("[RAYDIUM] Input amount (raw):", inputAmount);
+
+    // Get best route
+    const bestRoute = await getBestRoute({
+      raydium,
+      inputMint,
+      outputMint,
+      inputAmount,
+      inputDecimals,
+      outputDecimals,
+      slippage,
+      isDevnet,
+    });
+
+    console.log("[RAYDIUM] Best route selected:", {
+      type: bestRoute.routeType,
+      output: bestRoute.amountOut.amount.toExact(),
+      impact: bestRoute.priceImpact,
+    });
+
+    // Execute swap
+    const txId = await executeSwap({ raydium, bestRoute, isDevnet });
+
+    console.log("[RAYDIUM] Swap successful:", txId);
+
+    return {
+      signature: txId,
+      explorerLink: createExplorerLink(txId),
+      inputAmount: inputTokenAmount.toString(),
+      outputAmount: bestRoute.amountOut.amount.toExact(),
+    };
+  } catch (error: any) {
+    console.error("[RAYDIUM] Token-to-token swap failed - Full error:", error);
+    console.error("[RAYDIUM] Error message:", error?.message);
+    console.error("[RAYDIUM] Error logs:", error?.logs);
+    console.error("[RAYDIUM] Error code:", error?.code);
+
+    // Try to get more meaningful error message
+    let errorMessage = "Unknown error";
+    if (error?.message) {
+      errorMessage = error.message;
+    } else if (error?.logs && Array.isArray(error.logs)) {
+      errorMessage = error.logs.join("\n");
+    } else if (typeof error === "string") {
+      errorMessage = error;
+    }
+
+    throw new Error(`Swap failed: ${errorMessage}`);
+  }
+}
+
+/**
+ * Preview swap output for Token to Token
+ */
+export async function previewTokenForToken(params: {
+  inputTokenMint: string;
+  outputTokenMint: string;
+  inputTokenAmount: number;
+}): Promise<QuoteResult> {
+  const { inputTokenMint, outputTokenMint, inputTokenAmount } = params;
+
+  const inputMint = new PublicKey(inputTokenMint);
+  const outputMint = new PublicKey(outputTokenMint);
+
+  // Fetch actual token decimals for both tokens
+  const inputDecimals = await getTokenDecimals(inputTokenMint);
+  const outputDecimals = await getTokenDecimals(outputTokenMint);
+  const inputAmount = Math.floor(inputTokenAmount * Math.pow(10, inputDecimals)).toString();
+
+  return getBestPriceQuote({
+    inputMint,
+    outputMint,
+    inputAmount,
+    inputDecimals,
+    outputDecimals,
   });
 }
