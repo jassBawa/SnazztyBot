@@ -1,6 +1,6 @@
 import { Connection, Keypair, PublicKey, clusterApiUrl, sendAndConfirmTransaction, Transaction } from "@solana/web3.js";
 import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, getAccount } from "@solana/spl-token";
-import { upsertTelegramUser, getUserByTelegramId } from "./db";
+import { upsertTelegramUser, getUserByTelegramId } from "./db/user";
 import { encryptSecretKey, decryptSecretKey } from "./encryption";
 
 type Balances = {
