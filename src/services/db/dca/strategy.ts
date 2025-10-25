@@ -22,6 +22,12 @@ export async function getUserDcaStrategies(userId: number) {
   });
 }
 
+export async function getDcaStrategy(strategyId: string) {
+  return prisma.dcaStrategy.findUnique({
+    where: { id: strategyId },
+  });
+}
+
 export async function getExecutableDcaStrategies() {
   return prisma.dcaStrategy.findMany({
     where: {

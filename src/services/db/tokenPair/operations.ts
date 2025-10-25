@@ -6,3 +6,13 @@ export async function getAllActiveTokenPairs() {
     orderBy: { createdAt: 'desc' },
   });
 }
+
+export async function getTokenPairBySymbols(baseToken: string, targetToken: string) {
+  return prisma.tokenPair.findFirst({
+    where: {
+      baseToken,
+      targetToken,
+      active: true,
+    },
+  });
+}
