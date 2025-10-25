@@ -34,7 +34,6 @@ export function registerQuickCommands(bot: Telegraf) {
         }
       }
 
-      message += `\nUse /portfolio for full details`;
 
       await ctx.reply(message, { parse_mode: "Markdown" });
     } catch (err: any) {
@@ -67,41 +66,6 @@ export function registerQuickCommands(bot: Telegraf) {
     }
   });
 
-  // Portfolio view - full token holdings
-  bot.command(["portfolio", "p", "holdings"], async (ctx) => {
-    try {
-      const telegramId = getTelegramId(ctx);
-      const kp = await getOrCreateUserKeypair(telegramId);
-      const balances = await getBalances(kp.publicKey);
-      const tokenBalances = await getTokenBalances(kp.publicKey.toBase58());
-
-      const native = Number(balances.nativeSol).toFixed(6);
-
-      let message = `📊 *Portfolio*\n\n` +
-        `📍 Wallet: \`${kp.publicKey.toBase58()}\`\n\n` +
-        `💎 *Native:*\n` +
-        `• SOL: \`${native}\`\n`;
-
-      if (tokenBalances.length > 0) {
-        message += `\n🪙 *Token Holdings (${tokenBalances.length}):*\n`;
-        tokenBalances.forEach((token, index) => {
-          const amount = token.amount.toFixed(Math.min(token.decimals, 6));
-          message += `${index + 1}. ${token.symbol}: \`${amount}\`\n`;
-          // Add mint address for easy copy
-          message += `   \`${token.mint}\`\n`;
-        });
-      } else {
-        message += `\n_No token holdings yet_\n`;
-      }
-
-      message += `\n💡 Use /buy or /sell to trade`;
-
-      await ctx.reply(message, { parse_mode: "Markdown", ...backToMainKeyboard() });
-    } catch (err: any) {
-      await ctx.reply(`❌ Failed to fetch portfolio: ${err?.message ?? "unknown error"}`);
-    }
-  });
-
   // Refresh - re-fetch all data
   bot.command(["refresh", "r"], async (ctx) => {
     try {
@@ -121,7 +85,7 @@ export function registerQuickCommands(bot: Telegraf) {
         message += `🪙 Tokens: ${tokenBalances.length}\n`;
       }
 
-      message += `\nUse /balance or /portfolio for details`;
+      message += `\nUse /balance for details`;
 
       await ctx.reply(message, { parse_mode: "Markdown" });
     } catch (err: any) {
@@ -129,17 +93,4 @@ export function registerQuickCommands(bot: Telegraf) {
     }
   });
 
-  // Network status
-  bot.command("network", async (ctx) => {
-    const network = process.env.SOLANA_CLUSTER || "devnet";
-    const rpcUrl = process.env.SOLANA_RPC_URL || "default";
-
-    await ctx.reply(
-      `🌐 *Network Info*\n\n` +
-        `Network: \`${network}\`\n` +
-        `RPC: \`${rpcUrl}\`\n\n` +
-        `${network === "devnet" ? "⚠️ *Running on DEVNET*\nTokens have no real value" : "✅ Running on MAINNET"}`,
-      { parse_mode: "Markdown" }
-    );
-  });
 }

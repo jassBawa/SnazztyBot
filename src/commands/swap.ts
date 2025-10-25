@@ -499,7 +499,7 @@ export function registerSwapCommands(bot: Telegraf) {
       console.log("[SWAP] Transaction successful! TX:", result.signature);
 
       const actionEmoji = session.action === "buy" ? "🟢" : session.action === "sell" ? "🔴" : "🔄";
-      let swapMessage = `✅ ${actionEmoji} *Swap Successful!*\n\n`;
+      let swapMessage = `${actionEmoji} *Swap Successful!*\n\n`;
 
       if (session.action === "exchange") {
         swapMessage += `Swapped: ${result.inputAmount} Input Token\n` +

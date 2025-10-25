@@ -1,4 +1,4 @@
-import { prisma } from "../src/services/db";
+import { prisma } from "../src/services/db/client";
 
 async function main() {
   const tokenPairs = [

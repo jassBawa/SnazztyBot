@@ -8,7 +8,7 @@ import {
   TokenAmount,
   toApiV3Token,
 } from "@raydium-io/raydium-sdk-v2";
-import { getConnection, getTokenDecimals, isToken2022, getTokenProgramId } from "./solana";
+import { getConnection, getTokenDecimals, isToken2022, getTokenProgramId, ensureTokenAccount } from "./solana";
 
 // Constants
 const SOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
@@ -188,24 +188,39 @@ async function executeSwap(params: {
   raydium: Raydium;
   bestRoute: any;
   isDevnet: boolean;
+  hasToken2022?: boolean;
 }): Promise<string> {
-  const { raydium, bestRoute, isDevnet } = params;
+  const { raydium, bestRoute, isDevnet, hasToken2022 = false } = params;
 
   try {
     const programIds = getPoolProgramIds(isDevnet);
 
     console.log("[RAYDIUM] Preparing swap transaction...");
+
+    // Since we're pre-creating Token2022 accounts, we can use associatedOnly
+    // But still disable checkCreateATAOwner for Token2022 to avoid conflicts
+    const ownerInfo = hasToken2022 ? {
+      associatedOnly: true,
+      checkCreateATAOwner: false,  // Don't try to create - we already did
+    } : {
+      associatedOnly: true,
+      checkCreateATAOwner: true,
+    };
+
+    console.log("[RAYDIUM] Swap configuration:", {
+      routeType: bestRoute.routeType,
+      hasToken2022,
+      ownerInfo
+    });
+
     const { execute } = await raydium.tradeV2.swap({
       swapInfo: bestRoute,
       txVersion: TxVersion.V0,
       routeProgram: programIds.router,
-      ownerInfo: {
-        associatedOnly: true,
-        checkCreateATAOwner: true,
-      },
+      ownerInfo,
       computeBudgetConfig: {
-        units: 600000,
-        microLamports: 100000,
+        units: 800000,  // Increased for route swaps
+        microLamports: 200000,  // Increased priority fee
       },
     });
 
@@ -265,8 +280,25 @@ export async function swapSolForToken(params: {
       impact: bestRoute.priceImpact,
     });
 
+    // Check if output token is Token2022
+    const isOutputToken2022 = await isToken2022(tokenMint);
+
+    // If it's Token2022, ensure the account exists BEFORE the swap
+    if (isOutputToken2022) {
+      console.log("[RAYDIUM] Pre-creating Token2022 account...");
+      await ensureTokenAccount({
+        owner: userKeypair,
+        tokenMint,
+      });
+    }
+
     // Execute swap
-    const txId = await executeSwap({ raydium, bestRoute, isDevnet });
+    const txId = await executeSwap({
+      raydium,
+      bestRoute,
+      isDevnet,
+      hasToken2022: isOutputToken2022
+    });
 
     console.log("[RAYDIUM] Swap successful:", txId);
 
@@ -325,8 +357,25 @@ export async function swapTokenForSol(params: {
       impact: bestRoute.priceImpact,
     });
 
+    // Check if input token is Token2022
+    const isInputToken2022 = await isToken2022(tokenMint);
+
+    // For Token2022 tokens, ensure the account exists
+    if (isInputToken2022) {
+      console.log("[RAYDIUM] Ensuring Token2022 account exists...");
+      await ensureTokenAccount({
+        owner: userKeypair,
+        tokenMint,
+      });
+    }
+
     // Execute swap
-    const txId = await executeSwap({ raydium, bestRoute, isDevnet });
+    const txId = await executeSwap({
+      raydium,
+      bestRoute,
+      isDevnet,
+      hasToken2022: isInputToken2022
+    });
 
     console.log("[RAYDIUM] Swap successful:", txId);
 
@@ -404,9 +453,6 @@ export async function previewSolForToken(params: {
   });
 }
 
-/**
- * Preview swap output for Token to SOL
- */
 export async function previewTokenForSol(params: {
   tokenMint: string;
   tokenAmount: number;
@@ -483,8 +529,34 @@ export async function swapTokenForToken(params: {
       impact: bestRoute.priceImpact,
     });
 
+    // Check if either token is Token2022
+    const isInputToken2022 = await isToken2022(inputTokenMint);
+    const isOutputToken2022 = await isToken2022(outputTokenMint);
+    const hasToken2022 = isInputToken2022 || isOutputToken2022;
+
+    // Ensure both token accounts exist if they're Token2022
+    if (isInputToken2022) {
+      console.log("[RAYDIUM] Ensuring input Token2022 account exists...");
+      await ensureTokenAccount({
+        owner: userKeypair,
+        tokenMint: inputTokenMint,
+      });
+    }
+    if (isOutputToken2022) {
+      console.log("[RAYDIUM] Ensuring output Token2022 account exists...");
+      await ensureTokenAccount({
+        owner: userKeypair,
+        tokenMint: outputTokenMint,
+      });
+    }
+
     // Execute swap
-    const txId = await executeSwap({ raydium, bestRoute, isDevnet });
+    const txId = await executeSwap({
+      raydium,
+      bestRoute,
+      isDevnet,
+      hasToken2022
+    });
 
     console.log("[RAYDIUM] Swap successful:", txId);
 

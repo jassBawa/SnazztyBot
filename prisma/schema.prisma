@@ -1,5 +1,3 @@
-
-
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/client"
@@ -11,59 +9,58 @@ datasource db {
 }
 
 model TelegramUser {
-  id                   Int       @id @default(autoincrement())
-  telegramId           BigInt    @unique
-  username             String?
-  firstName            String?
-  lastName             String?
+  id         Int     @id @default(autoincrement())
+  telegramId BigInt  @unique
+  username   String?
+  firstName  String?
+  lastName   String?
 
-  // Single wallet per user
-  walletPubKey         String    @unique
-  encryptedPrivateKey  String    // Encrypted secret key stored securely
+  walletPubKey        String @unique
+  encryptedPrivateKey String // Encrypted secret key stored securely
 
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-   dcaStrategies  DcaStrategy[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  dcaStrategies DcaStrategy[]
 }
 
-model DcaStrategy{
-   id                String        @id @default(uuid())
-  userId            Int
-  user              TelegramUser  @relation(fields: [userId], references: [id])
+model DcaStrategy {
+  id     String       @id @default(uuid())
+  userId Int
+  user   TelegramUser @relation(fields: [userId], references: [id])
 
   baseToken         String
-  targetToken       String 
-  amountPerInterval Decimal       @db.Decimal(65, 30)
-  frequency         DcaFrequency       
+  targetToken       String
+  amountPerInterval Decimal      @db.Decimal(65, 30)
+  frequency         DcaFrequency
   nextExecutionTime DateTime
-  status            DcaStatus     @default(ACTIVE)
+  status            DcaStatus    @default(ACTIVE)
 
-  totalInvested     Decimal       @db.Decimal(65, 30) @default(0)
-  executionCount    Int           @default(0)
-  averageBuyPrice   Decimal?      @db.Decimal(65, 30)
+  totalInvested       Decimal  @default(0) @db.Decimal(65, 30)
+  executionCount      Int      @default(0)
+  averageBuyPrice     Decimal? @db.Decimal(65, 30)
+  consecutiveFailures Int      @default(0)
 
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  executions        DcaExecution[]
-
+  executions DcaExecution[]
 }
 
 model DcaExecution {
-  id                String      @id @default(uuid())
-  strategyId        String
-  strategy          DcaStrategy @relation(fields: [strategyId], references: [id])
+  id         String      @id @default(uuid())
+  strategyId String
+  strategy   DcaStrategy @relation(fields: [strategyId], references: [id])
 
-  executionTime     DateTime    @default(now())
-  amountInvested    Decimal     @db.Decimal(65, 30)
-  tokensReceived    Decimal     @db.Decimal(65, 30)
-  executionPrice    Decimal     @db.Decimal(65, 30)  // price per token during execution
+  executionTime  DateTime @default(now())
+  amountInvested Decimal  @db.Decimal(65, 30)
+  tokensReceived Decimal  @db.Decimal(65, 30)
+  executionPrice Decimal  @db.Decimal(65, 30) 
 
-  txHash            String?     // blockchain/exchange transaction hash
-  status            ExecutionStatus @default(SUCCESS)
-  errorMessage      String?     // useful for debugging failed executions
+  txHash       String?
+  status       ExecutionStatus @default(SUCCESS)
+  errorMessage String?
 
-  createdAt         DateTime    @default(now())
+  createdAt DateTime @default(now())
 }
 
 enum DcaStatus {
@@ -89,13 +86,12 @@ enum DcaFrequency {
 
 model TokenPair {
   id          String   @id @default(uuid())
-  baseToken   String   // e.g., USDC
+  baseToken   String 
   baseMint    String
-  targetToken String   // e.g., BONK
-  targetMint   String
+  targetToken String 
+  targetMint  String
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
 
   @@unique([baseToken, targetToken], name: "baseToken_targetToken")
-
 }

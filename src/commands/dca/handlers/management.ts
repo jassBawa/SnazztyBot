@@ -1,6 +1,9 @@
 import { Telegraf, Markup } from "telegraf";
 import { pauseDcaStrategy, resumeDcaStrategy, cancelDcaStrategy } from "../../../services/db";
 import { backToMainKeyboard } from "../../../utils/keyboards";
+import { getStrategyWithExecutions } from "../../../services/db/dca/execution";
+import { calculateStrategyAnalytics } from "../analytics";
+import { buildStrategyDetailMessage, buildStrategyDetailKeyboard } from "../messages";
 
 export function registerManagementHandlers(bot: Telegraf) {
 
@@ -17,58 +20,30 @@ export function registerManagementHandlers(bot: Telegraf) {
         await ctx.answerCbQuery("✅ Strategy resumed");
       }
 
-      await ctx.editMessageText("✅ Strategy updated! Use /dca\\_list to see the latest status.");
+      // Refresh the detail view with updated strategy
+      const strategyWithExecs = await getStrategyWithExecutions(strategyId);
+      if (strategyWithExecs) {
+        const analytics = await calculateStrategyAnalytics(
+          strategyWithExecs,
+          strategyWithExecs.executions
+        );
+        const message = buildStrategyDetailMessage(strategyWithExecs, analytics);
+        const keyboard = buildStrategyDetailKeyboard(strategyWithExecs);
+
+        await ctx.editMessageText(message, {
+          parse_mode: "Markdown",
+          ...keyboard,
+        });
+      } else {
+        await ctx.editMessageText("✅ Strategy updated! Use /dca\\_list to see the latest status.", {
+          parse_mode: "Markdown",
+        });
+      }
     } catch (error: any) {
       console.error(`[DCA] Error pausing/resuming strategy:`, error);
       await ctx.answerCbQuery(`Error: ${error?.message}`);
     }
   });
 
-  bot.action(/^DCA_CANCEL_STRATEGY_(.+)$/, async (ctx) => {
-    try {
-      const strategyId = ctx.match[1];
-      const confirmKeyboard = Markup.inlineKeyboard([
-        [
-          Markup.button.callback("✅ Yes, Cancel Strategy", `DCA_CONFIRM_CANCEL_${strategyId}`),
-          Markup.button.callback("❌ No, Keep It", "DCA_KEEP_STRATEGY")
-        ]
-      ]);
-
-      await ctx.editMessageText(
-        `⚠️ *Confirm Cancellation*\n\n` +
-        `Are you sure you want to cancel this DCA strategy?\n\n` +
-        `This action cannot be undone.`,
-        { parse_mode: "Markdown", ...confirmKeyboard }
-      );
-      await ctx.answerCbQuery();
-    } catch (error: any) {
-      console.error(`[DCA] Error showing cancel confirmation:`, error);
-      await ctx.answerCbQuery(`Error: ${error?.message}`);
-    }
-  });
-
-  bot.action(/^DCA_CONFIRM_CANCEL_(.+)$/, async (ctx) => {
-    try {
-      const strategyId = ctx.match[1];
-      await cancelDcaStrategy(strategyId);
-
-      await ctx.editMessageText(
-        `✅ DCA strategy cancelled successfully.\n\n` +
-        `Use /dca\\_list to view your remaining strategies.`,
-        { ...backToMainKeyboard() }
-      );
-      await ctx.answerCbQuery("✅ Strategy cancelled");
-    } catch (error: any) {
-      console.error(`[DCA] Error cancelling strategy:`, error);
-      await ctx.answerCbQuery(`Error: ${error?.message}`);
-    }
-  });
-
-  bot.action("DCA_KEEP_STRATEGY", async (ctx) => {
-    await ctx.editMessageText(
-      `✅ Strategy kept.\n\nUse /dca\\_list to view your strategies.`,
-      { ...backToMainKeyboard() }
-    );
-    await ctx.answerCbQuery("Strategy kept");
-  });
+  // Old handlers removed - now using new detail view handlers in analytics.ts
 }

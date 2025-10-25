@@ -1,5 +1,5 @@
 import { Connection, Keypair, PublicKey, clusterApiUrl, sendAndConfirmTransaction, Transaction } from "@solana/web3.js";
-import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, getAccount } from "@solana/spl-token";
+import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, getAccount, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { upsertTelegramUser, getUserByTelegramId } from "./db/user";
 import { encryptSecretKey, decryptSecretKey } from "./encryption";
 
@@ -166,7 +166,70 @@ export async function getTokenProgramId(tokenMint: string): Promise<string> {
   const is2022 = await isToken2022(tokenMint);
   return is2022
     ? "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-    : "TokenkGPmanGNXRCf56LSXt8y6LYouGxvPjSzkMGQJx";
+    : "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+}
+
+/**
+ * Ensure an associated token account exists for the given mint
+ * Handles both regular SPL tokens and Token-2022
+ */
+export async function ensureTokenAccount(params: {
+  owner: Keypair;
+  tokenMint: string;
+}): Promise<PublicKey> {
+  const { owner, tokenMint } = params;
+  const connection = getConnection();
+  const mintPubkey = new PublicKey(tokenMint);
+
+  // Check if it's Token2022
+  const is2022 = await isToken2022(tokenMint);
+  const programId = is2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+
+  console.log(`[SOLANA] Ensuring token account for ${tokenMint} (Token2022: ${is2022})`);
+
+  // Get the associated token address with correct program ID
+  const ata = await getAssociatedTokenAddress(
+    mintPubkey,
+    owner.publicKey,
+    false, // allowOwnerOffCurve
+    programId
+  );
+
+  console.log(`[SOLANA] Associated token account: ${ata.toBase58()}`);
+
+  try {
+    // Check if account exists
+    await getAccount(connection, ata, 'confirmed', programId);
+    console.log(`[SOLANA] Token account already exists`);
+    return ata;
+  } catch (error) {
+    console.log(`[SOLANA] Token account doesn't exist, creating...`);
+
+    // Create the account
+    const transaction = new Transaction().add(
+      createAssociatedTokenAccountInstruction(
+        owner.publicKey, // payer
+        ata, // associatedToken
+        owner.publicKey, // owner
+        mintPubkey, // mint
+        programId // programId
+      )
+    );
+
+    try {
+      const signature = await sendAndConfirmTransaction(
+        connection,
+        transaction,
+        [owner],
+        { commitment: 'confirmed' }
+      );
+      console.log(`[SOLANA] Token account created: ${signature}`);
+      return ata;
+    } catch (createError: any) {
+      console.error(`[SOLANA] Error creating token account:`, createError);
+      throw new Error(`Failed to create token account: ${createError.message}`);
+    }
+  }
 }
 
 /**

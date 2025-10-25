@@ -6,6 +6,7 @@
 import { Markup } from "telegraf";
 import { DcaSession, DcaFrequency } from "./types";
 import { calculateNextExecutionTime, getFrequencyDisplay, getStatusEmoji } from "./utils";
+import { StrategyAnalytics, PortfolioAnalytics, formatNumber, formatPnL } from "./analytics";
 
 /**
  * Build token pair selection message and keyboard
@@ -183,7 +184,7 @@ export function buildStrategyListMessage(strategies: any[]): string {
 }
 
 /**
- * Build strategy management keyboard
+ * Build strategy management keyboard (OLD - for backwards compatibility)
  * @param strategies - User's DCA strategies
  * @returns Inline keyboard markup
  */
@@ -203,5 +204,284 @@ export function buildStrategyManagementKeyboard(strategies: any[]) {
   return Markup.inlineKeyboard([
     ...strategyButtons,
     [Markup.button.callback("➕ New DCA", "DCA_NEW")]
+  ]);
+}
+
+/**
+ * Build strategy list keyboard with clickable strategy buttons
+ * @param strategies - User's DCA strategies
+ * @returns Inline keyboard markup
+ */
+export function buildStrategyListKeyboard(strategies: any[]) {
+  const strategyButtons = strategies.map(strategy => {
+    const statusEmoji = getStatusEmoji(strategy.status);
+    return [
+      Markup.button.callback(
+        `${statusEmoji} ${strategy.baseToken} → ${strategy.targetToken}`,
+        `DCA_VIEW_${strategy.id}`
+      )
+    ];
+  });
+
+  return Markup.inlineKeyboard([
+    ...strategyButtons,
+    [
+      Markup.button.callback("➕ New Strategy", "DCA_NEW"),
+      Markup.button.callback("📊 Portfolio Stats", "DCA_PORTFOLIO_STATS")
+    ],
+    [Markup.button.callback("🔄 Refresh All", "DCA_REFRESH_LIST")]
+  ]);
+}
+
+/**
+ * Build strategy detail view message with full analytics
+ * @param strategy - DCA strategy
+ * @param analytics - Calculated analytics
+ * @returns Formatted message
+ */
+export function buildStrategyDetailMessage(
+  strategy: any,
+  analytics: StrategyAnalytics
+): string {
+  const statusEmoji = getStatusEmoji(strategy.status);
+
+  let message = `📊 *Strategy Details*\n\n`;
+  message += `${statusEmoji} *${strategy.baseToken} → ${strategy.targetToken}*\n\n`;
+
+  message += `*Configuration:*\n`;
+  message += `Amount: ${strategy.amountPerInterval} ${strategy.baseToken}\n`;
+  message += `Frequency: ${getFrequencyDisplay(strategy.frequency)}\n`;
+  message += `Status: ${strategy.status}\n`;
+
+  if (strategy.status === "ACTIVE") {
+    message += `Next Run: ${new Date(strategy.nextExecutionTime).toLocaleString()}\n`;
+  }
+
+  if (strategy.consecutiveFailures > 0) {
+    message += `⚠️ Consecutive Failures: ${strategy.consecutiveFailures}/3\n`;
+  }
+
+  message += `\n*Performance:*\n`;
+  message += `Total Invested: ${formatNumber(analytics.totalInvested)} ${strategy.baseToken}\n`;
+  message += `Tokens Received: ${formatNumber(analytics.totalTokensReceived)} ${strategy.targetToken}\n`;
+  message += `Average Buy Price: ${formatNumber(analytics.averageBuyPrice)} ${strategy.baseToken}\n`;
+  message += `Current Price: ${formatNumber(analytics.currentPrice)} ${strategy.baseToken}\n`;
+  message += `Current Value: ${formatNumber(analytics.currentValue)} ${strategy.baseToken}\n`;
+  message += `PnL: ${formatPnL(analytics.pnl, analytics.pnlPercentage)}\n\n`;
+
+  message += `*Execution Stats:*\n`;
+  message += `Total Executions: ${strategy.executionCount}\n`;
+  message += `Successful: ${analytics.successfulExecutions} ✅\n`;
+  message += `Failed: ${analytics.failedExecutions} ❌\n`;
+  message += `Success Rate: ${formatNumber(analytics.successRate, 2)}%\n`;
+
+  return message;
+}
+
+/**
+ * Build strategy detail view keyboard
+ * @param strategy - DCA strategy
+ * @returns Inline keyboard markup
+ */
+export function buildStrategyDetailKeyboard(strategy: any) {
+  const isCancelled = strategy.status === "CANCELLED";
+  const isPaused = strategy.status === "PAUSED";
+
+  // If cancelled, show restart button
+  if (isCancelled) {
+    return Markup.inlineKeyboard([
+      [
+        Markup.button.callback("📜 View History", `DCA_HISTORY_${strategy.id}`),
+        Markup.button.callback("🔄 Refresh", `DCA_REFRESH_DETAIL_${strategy.id}`)
+      ],
+      [
+        Markup.button.callback("🔄 Restart DCA", `DCA_RESTART_${strategy.id}`)
+      ],
+      [Markup.button.callback("« Back to List", "DCA_BACK_TO_LIST")]
+    ]);
+  }
+
+  // For active/paused strategies
+  const pauseResumeButton = isPaused
+    ? Markup.button.callback("▶️ Resume", `DCA_RESUME_${strategy.id}`)
+    : Markup.button.callback("⏸️ Pause", `DCA_PAUSE_${strategy.id}`);
+
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback("📜 View History", `DCA_HISTORY_${strategy.id}`),
+      Markup.button.callback("🔄 Refresh", `DCA_REFRESH_DETAIL_${strategy.id}`)
+    ],
+    [
+      pauseResumeButton,
+      Markup.button.callback("❌ Cancel", `DCA_CANCEL_${strategy.id}`)
+    ],
+    [Markup.button.callback("« Back to List", "DCA_BACK_TO_LIST")]
+  ]);
+}
+
+/**
+ * Build portfolio stats message
+ * @param analytics - Portfolio analytics
+ * @returns Formatted message
+ */
+export function buildPortfolioStatsMessage(analytics: PortfolioAnalytics): string {
+  let message = `📊 *Portfolio Analytics*\n\n`;
+
+  message += `*Overview:*\n`;
+  message += `Total Strategies: ${analytics.totalStrategies}\n`;
+  message += `Active: ${analytics.activeStrategies} 🟢\n`;
+  message += `Paused: ${analytics.pausedStrategies} ⏸️\n\n`;
+
+  message += `*Financial Summary:*\n`;
+  message += `Total Invested: ${formatNumber(analytics.totalInvested, 4)}\n`;
+  message += `Current Value: ${formatNumber(analytics.totalCurrentValue, 4)}\n`;
+  message += `Overall PnL: ${formatPnL(analytics.overallPnl, analytics.overallPnlPercentage)}\n\n`;
+
+  message += `*Execution Stats:*\n`;
+  message += `Total Executions: ${analytics.totalExecutions}\n`;
+  message += `Successful: ${analytics.successfulExecutions} ✅\n`;
+  message += `Success Rate: ${formatNumber(analytics.successRate, 2)}%\n`;
+
+  return message;
+}
+
+/**
+ * Build portfolio stats keyboard
+ * @returns Inline keyboard markup
+ */
+export function buildPortfolioStatsKeyboard() {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback("📋 View Strategies", "DCA_BACK_TO_LIST"),
+      Markup.button.callback("📜 All Transactions", "DCA_ALL_HISTORY")
+    ],
+    [Markup.button.callback("🔄 Refresh", "DCA_REFRESH_PORTFOLIO")]
+  ]);
+}
+
+/**
+ * Build transaction history selector message
+ * @param strategies - User's DCA strategies
+ * @returns Formatted message
+ */
+export function buildHistorySelectorMessage(strategies: any[]): string {
+  let message = `📜 *Transaction History*\n\n`;
+  message += `Select a strategy to view its execution history, or view all transactions:\n`;
+  return message;
+}
+
+/**
+ * Build transaction history selector keyboard
+ * @param strategies - User's DCA strategies
+ * @returns Inline keyboard markup
+ */
+export function buildHistorySelectorKeyboard(strategies: any[]) {
+  const strategyButtons = strategies.map(strategy => [
+    Markup.button.callback(
+      `${strategy.baseToken} → ${strategy.targetToken}`,
+      `DCA_HISTORY_${strategy.id}`
+    )
+  ]);
+
+  return Markup.inlineKeyboard([
+    ...strategyButtons,
+    [Markup.button.callback("📜 All Transactions", "DCA_ALL_HISTORY")],
+    [Markup.button.callback("« Back", "DCA_BACK_TO_LIST")]
+  ]);
+}
+
+/**
+ * Build execution history message for a strategy
+ * @param strategy - DCA strategy
+ * @param executions - Execution history
+ * @returns Formatted message
+ */
+export function buildExecutionHistoryMessage(
+  strategy: any,
+  executions: any[]
+): string {
+  let message = `📜 *Execution History*\n\n`;
+  message += `*Strategy:* ${strategy.baseToken} → ${strategy.targetToken}\n\n`;
+
+  if (executions.length === 0) {
+    message += `No executions yet.\n`;
+    return message;
+  }
+
+  message += `Last ${executions.length} executions:\n\n`;
+
+  executions.forEach((exec, index) => {
+    const statusEmoji = exec.status === "SUCCESS" ? "✅" : "❌";
+    message += `${index + 1}. ${statusEmoji} ${new Date(exec.executionTime).toLocaleString()}\n`;
+
+    if (exec.status === "SUCCESS") {
+      message += `   Invested: ${formatNumber(Number(exec.amountInvested))} ${strategy.baseToken}\n`;
+      message += `   Received: ${formatNumber(Number(exec.tokensReceived))} ${strategy.targetToken}\n`;
+      message += `   Price: ${formatNumber(Number(exec.executionPrice))} ${strategy.baseToken}\n`;
+      if (exec.txHash) {
+        message += `   TX: \`${exec.txHash.substring(0, 8)}...${exec.txHash.substring(exec.txHash.length - 8)}\`\n`;
+      }
+    } else {
+      message += `   Error: ${exec.errorMessage || "Unknown error"}\n`;
+    }
+    message += `\n`;
+  });
+
+  return message;
+}
+
+/**
+ * Build execution history keyboard
+ * @param strategyId - Strategy ID
+ * @returns Inline keyboard markup
+ */
+export function buildExecutionHistoryKeyboard(strategyId: string) {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("📊 Strategy Details", `DCA_VIEW_${strategyId}`)],
+    [Markup.button.callback("« Back to List", "DCA_BACK_TO_LIST")]
+  ]);
+}
+
+/**
+ * Build all executions history message
+ * @param executions - All execution history
+ * @returns Formatted message
+ */
+export function buildAllExecutionsMessage(executions: any[]): string {
+  let message = `📜 *All Transactions*\n\n`;
+
+  if (executions.length === 0) {
+    message += `No executions yet.\n`;
+    return message;
+  }
+
+  message += `Last ${executions.length} executions across all strategies:\n\n`;
+
+  executions.forEach((exec, index) => {
+    const statusEmoji = exec.status === "SUCCESS" ? "✅" : "❌";
+    const strategy = exec.strategy;
+
+    message += `${index + 1}. ${statusEmoji} ${strategy.baseToken} → ${strategy.targetToken}\n`;
+    message += `   ${new Date(exec.executionTime).toLocaleString()}\n`;
+
+    if (exec.status === "SUCCESS") {
+      message += `   Invested: ${formatNumber(Number(exec.amountInvested))} ${strategy.baseToken}\n`;
+      message += `   Received: ${formatNumber(Number(exec.tokensReceived))} ${strategy.targetToken}\n`;
+    } else {
+      message += `   Error: ${exec.errorMessage || "Unknown error"}\n`;
+    }
+    message += `\n`;
+  });
+
+  return message;
+}
+
+/**
+ * Build all executions history keyboard
+ * @returns Inline keyboard markup
+ */
+export function buildAllExecutionsKeyboard() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("« Back", "DCA_HISTORY_SELECTOR")]
   ]);
 }

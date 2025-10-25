@@ -2,7 +2,17 @@ import { getTelegramId } from "../../utils/telegram";
 import { getAllActiveTokenPairs, getUserByTelegramId, getUserDcaStrategies } from "../../services/db";
 import { backToMainKeyboard } from "../../utils/keyboards";
 import { getSessionKey, setSession, clearSession } from "./session";
-import { buildTokenPairSelection, buildStrategyListMessage, buildStrategyManagementKeyboard } from "./messages";
+import {
+  buildTokenPairSelection,
+  buildStrategyListMessage,
+  buildStrategyListKeyboard,
+  buildPortfolioStatsMessage,
+  buildPortfolioStatsKeyboard,
+  buildHistorySelectorMessage,
+  buildHistorySelectorKeyboard
+} from "./messages";
+import { getUserExecutions } from "../../services/db/dca/execution";
+import { calculatePortfolioAnalytics } from "./analytics";
 
 export async function setupDcaFlow(ctx: any): Promise<void> {
   try {
@@ -56,11 +66,84 @@ export async function showDcaList(ctx: any): Promise<void> {
     }
 
     const message = buildStrategyListMessage(strategies);
-    const keyboard = buildStrategyManagementKeyboard(strategies);
+    const keyboard = buildStrategyListKeyboard(strategies);
 
     await ctx.reply(message, { parse_mode: "Markdown", ...keyboard });
   } catch (error: any) {
     console.error(`[DCA] Error in showDcaList:`, error);
     await ctx.reply(`❌ Error: ${error?.message ?? "Failed to load strategies"}`);
+  }
+}
+
+export async function showPortfolioStats(ctx: any): Promise<void> {
+  try {
+    const telegramId = getTelegramId(ctx);
+
+    const user = await getUserByTelegramId(telegramId);
+    if (!user) {
+      await ctx.reply(
+        `❌ Please create a wallet first using /start`,
+        { ...backToMainKeyboard() }
+      );
+      return;
+    }
+
+    const strategies = await getUserDcaStrategies(user.id);
+
+    if (strategies.length === 0) {
+      await ctx.reply(
+        `📊 *Portfolio Analytics*\n\n` +
+        `You don't have any DCA strategies yet.\n\n` +
+        `Use /dca to create one!`,
+        { parse_mode: "Markdown", ...backToMainKeyboard() }
+      );
+      return;
+    }
+
+    const allExecutions = await getUserExecutions(user.id, 1000);
+    const analytics = await calculatePortfolioAnalytics(strategies, allExecutions);
+
+    const message = buildPortfolioStatsMessage(analytics);
+    const keyboard = buildPortfolioStatsKeyboard();
+
+    await ctx.reply(message, { parse_mode: "Markdown", ...keyboard });
+  } catch (error: any) {
+    console.error(`[DCA] Error in showPortfolioStats:`, error);
+    await ctx.reply(`❌ Error: ${error?.message ?? "Failed to load portfolio stats"}`);
+  }
+}
+
+export async function showHistorySelector(ctx: any): Promise<void> {
+  try {
+    const telegramId = getTelegramId(ctx);
+
+    const user = await getUserByTelegramId(telegramId);
+    if (!user) {
+      await ctx.reply(
+        `❌ Please create a wallet first using /start`,
+        { ...backToMainKeyboard() }
+      );
+      return;
+    }
+
+    const strategies = await getUserDcaStrategies(user.id);
+
+    if (strategies.length === 0) {
+      await ctx.reply(
+        `📜 *Transaction History*\n\n` +
+        `You don't have any DCA strategies yet.\n\n` +
+        `Use /dca to create one!`,
+        { parse_mode: "Markdown", ...backToMainKeyboard() }
+      );
+      return;
+    }
+
+    const message = buildHistorySelectorMessage(strategies);
+    const keyboard = buildHistorySelectorKeyboard(strategies);
+
+    await ctx.reply(message, { parse_mode: "Markdown", ...keyboard });
+  } catch (error: any) {
+    console.error(`[DCA] Error in showHistorySelector:`, error);
+    await ctx.reply(`❌ Error: ${error?.message ?? "Failed to load transaction history"}`);
   }
 }
