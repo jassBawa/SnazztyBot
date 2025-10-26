@@ -1,37 +1,33 @@
-node_modules/
-dist/
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-.env
-**.env**
-!.env.example
-/src/generated/prisma
+# dependencies
+node_modules
+.pnp
+.pnp.js
 
-# logs
-*.log
+# testing
+coverage
+
+# next.js
+.next/
+out/
+build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
 npm-debug.log*
 yarn-debug.log*
-pnpm-debug.log*
+yarn-error.log*
 
-# OS
-.DS_Store
+# local env files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!packages/database/.env
 
-# Editors
-.vscode/
-.idea/
-
-# SQLite / Prisma
-prisma/dev.db
-prisma/dev.db-journal
-*.db
-*.db-journal
-dev.db
-device.db
-
-# Local keystore
-data/wallets.json
-
-# Caches
-.turbo/
-.cache/
-
-generated
+# turbo
+.turbo
