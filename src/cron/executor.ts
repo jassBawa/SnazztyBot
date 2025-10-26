@@ -7,7 +7,7 @@ import {
 import { getTokenPairBySymbols } from '../services/db/tokenPair/operations';
 import { getOrCreateUserKeypair } from '../services/solana';
 import { swapSolForToken } from '../services/raydium';
-import { calculateNextExecutionTime } from '../commands/dca/utils';
+import { calculateNextExecutionTime, fromSmallestUnit, toSmallestUnit } from '../commands/dca/utils';
 import type { StrategyWithUser, ExecutionResult } from './types';
 
 async function executeDcaStrategy(strategy: StrategyWithUser): Promise<ExecutionResult> {
@@ -27,7 +27,8 @@ async function executeDcaStrategy(strategy: StrategyWithUser): Promise<Execution
     const userKeypair = await getOrCreateUserKeypair(userId);
     console.log(`[DCA Executor] User wallet loaded: ${userKeypair.publicKey.toBase58()}`);
 
-    const solAmount = Number(strategy.amountPerInterval);
+    // Convert BigInt amount to human-readable number for swap
+    const solAmount = fromSmallestUnit(strategy.amountPerInterval, strategy.baseTokenDecimals);
     const targetTokenMint = tokenPair.targetMint;
 
     console.log(`[DCA Executor] Executing swap: ${solAmount} ${strategy.baseToken} → ${strategy.targetToken}`);
@@ -44,13 +45,17 @@ async function executeDcaStrategy(strategy: StrategyWithUser): Promise<Execution
     console.log(`[DCA Executor] TX: ${swapResult.signature}`);
     console.log(`[DCA Executor] Received: ${swapResult.outputAmount} tokens`);
 
-    const executionPrice = solAmount / Number(swapResult.outputAmount);
+    // Convert swap results back to BigInt for database storage
+    const tokensReceivedBigInt = toSmallestUnit(parseFloat(swapResult.outputAmount), strategy.targetTokenDecimals);
+
+    // Calculate execution price in smallest units (base per target token)
+    const executionPriceBigInt = strategy.amountPerInterval / tokensReceivedBigInt;
 
     await recordDcaExecution({
       strategyId,
-      amountInvested: strategy.amountPerInterval.toString(),
-      tokensReceived: swapResult.outputAmount,
-      executionPrice: executionPrice.toString(),
+      amountInvested: strategy.amountPerInterval,
+      tokensReceived: tokensReceivedBigInt,
+      executionPrice: executionPriceBigInt,
       txHash: swapResult.signature,
       status: 'SUCCESS',
     });
@@ -62,7 +67,7 @@ async function executeDcaStrategy(strategy: StrategyWithUser): Promise<Execution
     await updateDcaStrategyAfterExecution({
       strategyId,
       nextExecutionTime,
-      amountInvested: strategy.amountPerInterval.toString(),
+      amountInvested: strategy.amountPerInterval,
     });
 
     console.log(`[DCA Executor] Strategy updated. Next execution: ${nextExecutionTime.toLocaleString()}`);
@@ -81,9 +86,9 @@ async function executeDcaStrategy(strategy: StrategyWithUser): Promise<Execution
     try {
       await recordDcaExecution({
         strategyId,
-        amountInvested: strategy.amountPerInterval.toString(),
-        tokensReceived: '0',
-        executionPrice: '0',
+        amountInvested: strategy.amountPerInterval,
+        tokensReceived: BigInt(0), // BigInt zero
+        executionPrice: BigInt(0), // BigInt zero
         status: 'FAILED',
         errorMessage,
       });

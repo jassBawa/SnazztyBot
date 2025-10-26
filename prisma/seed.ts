@@ -5,15 +5,12 @@ async function main() {
     {
       baseToken: 'SOL',
       baseMint: 'So11111111111111111111111111111111111111112',
+      baseTokenDecimals: 9, // SOL has 9 decimals
       targetToken: 'IMG',
-      targetMint: 'EdibWH8u5rmCGmbU1jBBEJtnk3Qo7JdU71FAzkWu2dhH',
+      targetMint: 'H3grgvuWs6aa5ANDYQ1Cwh2U9WfpFb9GWVUqZTWr3teq',
+      targetTokenDecimals: 9, // IMG token decimals (adjust as needed)
     },
-    {
-      baseToken: 'SOL',
-      baseMint: 'So11111111111111111111111111111111111111112',
-      targetToken: 'BAS',
-      targetMint: '74Nh1p1JD2hsq3Kn55NMH8bvazFDkpgZoeWPYUWcianF',
-    },
+
   ];
 
   for (const pair of tokenPairs) {
@@ -26,14 +23,18 @@ async function main() {
       },
       update: {
         baseMint: pair.baseMint,
+        baseTokenDecimals: pair.baseTokenDecimals,
         targetMint: pair.targetMint,
+        targetTokenDecimals: pair.targetTokenDecimals,
         active: true,
       },
       create: {
         baseToken: pair.baseToken,
         baseMint: pair.baseMint,
+        baseTokenDecimals: pair.baseTokenDecimals,
         targetToken: pair.targetToken,
         targetMint: pair.targetMint,
+        targetTokenDecimals: pair.targetTokenDecimals,
       },
     });
   }

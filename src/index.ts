@@ -1,7 +1,7 @@
 import { message } from 'telegraf/filters';
 import bot from './bot';
 import { registerCommands } from './commands';
-// import './cron'; // Start DCA execution cron job
+import './cron'; // Start DCA execution cron job
 
 // Register modular commands first
 registerCommands(bot);

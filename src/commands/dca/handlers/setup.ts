@@ -1,9 +1,9 @@
 import { Telegraf } from "telegraf";
-import { getAllActiveTokenPairs, createDcaStrategy, getUserByTelegramId } from "../../../services/db";
+import { getAllActiveTokenPairs, createDcaStrategy, getUserByTelegramId, getExistingStrategyForTokenPair } from "../../../services/db";
 import { backToMainKeyboard } from "../../../utils/keyboards";
 import { getSessionKey, getSession, setSession, clearSession } from "../session";
 import { DcaFrequency } from "../types";
-import { calculateNextExecutionTime, safeEditOrReply } from "../utils";
+import { calculateNextExecutionTime, safeEditOrReply, toSmallestUnit } from "../utils";
 import {
   buildAmountPrompt,
   buildFrequencyKeyboard,
@@ -39,6 +39,8 @@ export function registerSetupHandlers(bot: Telegraf) {
       session.targetToken = selectedPair.targetToken;
       session.baseMint = selectedPair.baseMint;
       session.targetMint = selectedPair.targetMint;
+      session.baseTokenDecimals = selectedPair.baseTokenDecimals;
+      session.targetTokenDecimals = selectedPair.targetTokenDecimals;
       session.step = "awaiting_amount";
       setSession(sessionKey, session);
 
@@ -139,14 +141,50 @@ export function registerSetupHandlers(bot: Telegraf) {
         return;
       }
 
+      // Check if user already has an active or paused strategy for this token pair
+      const existingStrategy = await getExistingStrategyForTokenPair(
+        user.id,
+        session.baseToken!,
+        session.targetToken!
+      );
+
+      if (existingStrategy) {
+        const statusText = existingStrategy.status === 'ACTIVE' ? 'active' : 'paused';
+        await safeEditOrReply(
+          ctx,
+          `⚠️ *You already have a ${statusText} DCA strategy for this token pair!*\n\n` +
+          `Token Pair: ${session.baseToken} → ${session.targetToken}\n` +
+          `Amount: ${existingStrategy.amountPerInterval} ${session.baseToken}\n` +
+          `Frequency: ${existingStrategy.frequency}\n\n` +
+          `You can only have one active or paused DCA per token pair.\n\n` +
+          `💡 Use /dca\\_list to manage your existing strategies.`,
+          {
+            parse_mode: "Markdown",
+            ...backToMainKeyboard()
+          }
+        );
+        clearSession(sessionKey);
+        await ctx.answerCbQuery("⚠️ Strategy already exists");
+        return;
+      }
+
       const nextExecutionTime = calculateNextExecutionTime(session.frequency!);
+
+      // Convert human-readable amount to smallest unit (e.g., SOL to lamports)
+      const amountInSmallestUnit = toSmallestUnit(
+        parseFloat(session.amountPerInterval!),
+        session.baseTokenDecimals!
+      );
+
       const strategy = await createDcaStrategy({
         userId: user.id,
         baseToken: session.baseToken!,
         targetToken: session.targetToken!,
-        amountPerInterval: session.amountPerInterval!,
+        amountPerInterval: amountInSmallestUnit,
         frequency: session.frequency!,
         nextExecutionTime,
+        baseTokenDecimals: session.baseTokenDecimals!,
+        targetTokenDecimals: session.targetTokenDecimals!,
       });
 
       const successMessage = buildSuccessMessage(strategy);
