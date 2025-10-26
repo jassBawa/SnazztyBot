@@ -5,8 +5,8 @@
 
 import { Markup } from "telegraf";
 import { DcaSession, DcaFrequency } from "./types";
-import { calculateNextExecutionTime, getFrequencyDisplay, getStatusEmoji } from "./utils";
-import { StrategyAnalytics, PortfolioAnalytics, formatNumber, formatPnL } from "./analytics";
+import { calculateNextExecutionTime, getFrequencyDisplay, getStatusEmoji, formatSmallestUnit } from "./utils";
+import { StrategyAnalytics, formatNumber, formatPnL, formatTokenAmount, calculateStrategyAnalytics } from "./analytics";
 
 /**
  * Build token pair selection message and keyboard
@@ -143,11 +143,12 @@ export function buildConfirmationKeyboard(sessionKey: string) {
  * @returns Formatted success message
  */
 export function buildSuccessMessage(strategy: any): string {
+  const formattedAmount = formatSmallestUnit(strategy.amountPerInterval, strategy.baseTokenDecimals);
   return (
     `✅ *DCA Strategy Created!*\n\n` +
     `🎯 *Strategy Details:*\n` +
     `Token Pair: ${strategy.baseToken} → ${strategy.targetToken}\n` +
-    `Amount: ${strategy.amountPerInterval} ${strategy.baseToken}\n` +
+    `Amount: ${formattedAmount} ${strategy.baseToken}\n` +
     `Frequency: ${getFrequencyDisplay(strategy.frequency)}\n` +
     `Status: ${strategy.status}\n` +
     `First execution: ${new Date(strategy.nextExecutionTime).toLocaleString()}\n\n` +
@@ -165,9 +166,11 @@ export function buildStrategyListMessage(strategies: any[]): string {
 
   strategies.forEach((strategy, index) => {
     const statusEmoji = getStatusEmoji(strategy.status);
+    const formattedAmount = formatSmallestUnit(strategy.amountPerInterval, strategy.baseTokenDecimals);
+    const formattedTotalInvested = formatSmallestUnit(strategy.totalInvested, strategy.baseTokenDecimals);
 
     message += `${index + 1}. ${statusEmoji} *${strategy.baseToken} → ${strategy.targetToken}*\n`;
-    message += `   Amount: ${strategy.amountPerInterval} ${strategy.baseToken}\n`;
+    message += `   Amount: ${formattedAmount} ${strategy.baseToken}\n`;
     message += `   Frequency: ${getFrequencyDisplay(strategy.frequency)}\n`;
     message += `   Status: ${strategy.status}\n`;
 
@@ -175,7 +178,7 @@ export function buildStrategyListMessage(strategies: any[]): string {
       message += `   ⚠️ Consecutive Failures: ${strategy.consecutiveFailures}/3\n`;
     }
 
-    message += `   Total Invested: ${strategy.totalInvested} ${strategy.baseToken}\n`;
+    message += `   Total Invested: ${formattedTotalInvested} ${strategy.baseToken}\n`;
     message += `   Executions: ${strategy.executionCount}\n`;
     message += `   Next Run: ${new Date(strategy.nextExecutionTime).toLocaleString()}\n\n`;
   });
@@ -244,12 +247,13 @@ export function buildStrategyDetailMessage(
   analytics: StrategyAnalytics
 ): string {
   const statusEmoji = getStatusEmoji(strategy.status);
+  const formattedAmount = formatSmallestUnit(strategy.amountPerInterval, strategy.baseTokenDecimals);
 
   let message = `📊 *Strategy Details*\n\n`;
   message += `${statusEmoji} *${strategy.baseToken} → ${strategy.targetToken}*\n\n`;
 
   message += `*Configuration:*\n`;
-  message += `Amount: ${strategy.amountPerInterval} ${strategy.baseToken}\n`;
+  message += `Amount: ${formattedAmount} ${strategy.baseToken}\n`;
   message += `Frequency: ${getFrequencyDisplay(strategy.frequency)}\n`;
   message += `Status: ${strategy.status}\n`;
 
@@ -261,13 +265,13 @@ export function buildStrategyDetailMessage(
     message += `⚠️ Consecutive Failures: ${strategy.consecutiveFailures}/3\n`;
   }
 
-  message += `\n*Performance:*\n`;
+  message += `\n*Performance (in ${strategy.baseToken}):*\n`;
   message += `Total Invested: ${formatNumber(analytics.totalInvested)} ${strategy.baseToken}\n`;
   message += `Tokens Received: ${formatNumber(analytics.totalTokensReceived)} ${strategy.targetToken}\n`;
-  message += `Average Buy Price: ${formatNumber(analytics.averageBuyPrice)} ${strategy.baseToken}\n`;
-  message += `Current Price: ${formatNumber(analytics.currentPrice)} ${strategy.baseToken}\n`;
+  message += `Average Buy Price: ${formatNumber(analytics.averageBuyPrice)} ${strategy.baseToken}/${strategy.targetToken}\n`;
+  message += `Current Price: ${formatNumber(analytics.currentPrice)} ${strategy.baseToken}/${strategy.targetToken}\n`;
   message += `Current Value: ${formatNumber(analytics.currentValue)} ${strategy.baseToken}\n`;
-  message += `PnL: ${formatPnL(analytics.pnl, analytics.pnlPercentage)}\n\n`;
+  message += `PnL: ${formatPnL(analytics.pnl, analytics.pnlPercentage)} ${strategy.baseToken}\n\n`;
 
   message += `*Execution Stats:*\n`;
   message += `Total Executions: ${strategy.executionCount}\n`;
@@ -320,27 +324,45 @@ export function buildStrategyDetailKeyboard(strategy: any) {
 }
 
 /**
- * Build portfolio stats message
- * @param analytics - Portfolio analytics
+ * Build portfolio stats message showing individual strategy performance
+ * @param strategies - User's DCA strategies
+ * @param allExecutions - All execution history
  * @returns Formatted message
  */
-export function buildPortfolioStatsMessage(analytics: PortfolioAnalytics): string {
-  let message = `📊 *Portfolio Analytics*\n\n`;
+export async function buildPortfolioStatsMessage(
+  strategies: any[],
+  allExecutions: any[]
+): Promise<string> {
+  let message = `📋 *Your DCA Strategies*\n`;
+  message += `━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-  message += `*Overview:*\n`;
-  message += `Total Strategies: ${analytics.totalStrategies}\n`;
-  message += `Active: ${analytics.activeStrategies} 🟢\n`;
-  message += `Paused: ${analytics.pausedStrategies} ⏸️\n\n`;
+  // Loop through each strategy and show individual performance
+  for (const strategy of strategies) {
+    const statusEmoji = getStatusEmoji(strategy.status);
+    const strategyExecutions = allExecutions.filter(e => e.strategyId === strategy.id);
 
-  message += `*Financial Summary:*\n`;
-  message += `Total Invested: ${formatNumber(analytics.totalInvested, 4)}\n`;
-  message += `Current Value: ${formatNumber(analytics.totalCurrentValue, 4)}\n`;
-  message += `Overall PnL: ${formatPnL(analytics.overallPnl, analytics.overallPnlPercentage)}\n\n`;
+    try {
+      // Calculate analytics for this strategy
+      const analytics = await calculateStrategyAnalytics(strategy, strategyExecutions);
 
-  message += `*Execution Stats:*\n`;
-  message += `Total Executions: ${analytics.totalExecutions}\n`;
-  message += `Successful: ${analytics.successfulExecutions} ✅\n`;
-  message += `Success Rate: ${formatNumber(analytics.successRate, 2)}%\n`;
+      // Format PnL emoji
+      const pnlEmoji = analytics.pnl >= 0 ? "📈" : "📉";
+      const pnlSign = analytics.pnl >= 0 ? "+" : "";
+
+      // Build the strategy display
+      message += `${statusEmoji} *${strategy.baseToken} → ${strategy.targetToken}*\n`;
+      message += `├ Invested: ${formatNumber(analytics.totalInvested, 4)} ${strategy.baseToken}\n`;
+      message += `├ Holdings: ${formatTokenAmount(analytics.totalTokensReceived)} ${strategy.targetToken} (~${formatNumber(analytics.currentValue, 4)} ${strategy.baseToken})\n`;
+      message += `└ ${pnlEmoji} PnL: ${pnlSign}${formatNumber(analytics.pnl, 4)} ${strategy.baseToken} (${pnlSign}${formatNumber(analytics.pnlPercentage, 2)}%)\n\n`;
+    } catch (error) {
+      console.error(`[Messages] Error calculating analytics for strategy ${strategy.id}:`, error);
+      // Fallback display if analytics fails
+      message += `${statusEmoji} *${strategy.baseToken} → ${strategy.targetToken}*\n`;
+      message += `├ Invested: ${formatNumber(Number(strategy.totalInvested), 4)} ${strategy.baseToken}\n`;
+      message += `├ Holdings: Calculating...\n`;
+      message += `└ PnL: Calculating...\n\n`;
+    }
+  }
 
   return message;
 }
@@ -361,10 +383,9 @@ export function buildPortfolioStatsKeyboard() {
 
 /**
  * Build transaction history selector message
- * @param strategies - User's DCA strategies
  * @returns Formatted message
  */
-export function buildHistorySelectorMessage(strategies: any[]): string {
+export function buildHistorySelectorMessage(): string {
   let message = `📜 *Transaction History*\n\n`;
   message += `Select a strategy to view its execution history, or view all transactions:\n`;
   return message;
@@ -415,9 +436,13 @@ export function buildExecutionHistoryMessage(
     message += `${index + 1}. ${statusEmoji} ${new Date(exec.executionTime).toLocaleString()}\n`;
 
     if (exec.status === "SUCCESS") {
-      message += `   Invested: ${formatNumber(Number(exec.amountInvested))} ${strategy.baseToken}\n`;
-      message += `   Received: ${formatNumber(Number(exec.tokensReceived))} ${strategy.targetToken}\n`;
-      message += `   Price: ${formatNumber(Number(exec.executionPrice))} ${strategy.baseToken}\n`;
+      const formattedInvested = formatSmallestUnit(exec.amountInvested, strategy.baseTokenDecimals);
+      const formattedReceived = formatSmallestUnit(exec.tokensReceived, strategy.targetTokenDecimals);
+      const formattedPrice = formatSmallestUnit(exec.executionPrice, strategy.baseTokenDecimals);
+
+      message += `   Invested: ${formattedInvested} ${strategy.baseToken}\n`;
+      message += `   Received: ${formattedReceived} ${strategy.targetToken}\n`;
+      message += `   Price: ${formattedPrice} ${strategy.baseToken}\n`;
       if (exec.txHash) {
         message += `   TX: \`${exec.txHash.substring(0, 8)}...${exec.txHash.substring(exec.txHash.length - 8)}\`\n`;
       }
@@ -465,8 +490,11 @@ export function buildAllExecutionsMessage(executions: any[]): string {
     message += `   ${new Date(exec.executionTime).toLocaleString()}\n`;
 
     if (exec.status === "SUCCESS") {
-      message += `   Invested: ${formatNumber(Number(exec.amountInvested))} ${strategy.baseToken}\n`;
-      message += `   Received: ${formatNumber(Number(exec.tokensReceived))} ${strategy.targetToken}\n`;
+      const formattedInvested = formatSmallestUnit(exec.amountInvested, strategy.baseTokenDecimals);
+      const formattedReceived = formatSmallestUnit(exec.tokensReceived, strategy.targetTokenDecimals);
+
+      message += `   Invested: ${formattedInvested} ${strategy.baseToken}\n`;
+      message += `   Received: ${formattedReceived} ${strategy.targetToken}\n`;
     } else {
       message += `   Error: ${exec.errorMessage || "Unknown error"}\n`;
     }

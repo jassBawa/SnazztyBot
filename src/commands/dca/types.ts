@@ -12,7 +12,9 @@ export interface DcaSession {
   targetToken?: string;
   baseMint?: string;
   targetMint?: string;
-  amountPerInterval?: string;
+  baseTokenDecimals?: number;
+  targetTokenDecimals?: number;
+  amountPerInterval?: string; // Human-readable amount (e.g., "1.5")
   frequency?: DcaFrequency;
 }
 

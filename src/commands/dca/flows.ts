@@ -101,9 +101,8 @@ export async function showPortfolioStats(ctx: any): Promise<void> {
     }
 
     const allExecutions = await getUserExecutions(user.id, 1000);
-    const analytics = await calculatePortfolioAnalytics(strategies, allExecutions);
 
-    const message = buildPortfolioStatsMessage(analytics);
+    const message = await buildPortfolioStatsMessage(strategies, allExecutions);
     const keyboard = buildPortfolioStatsKeyboard();
 
     await ctx.reply(message, { parse_mode: "Markdown", ...keyboard });
@@ -138,7 +137,7 @@ export async function showHistorySelector(ctx: any): Promise<void> {
       return;
     }
 
-    const message = buildHistorySelectorMessage(strategies);
+    const message = buildHistorySelectorMessage();
     const keyboard = buildHistorySelectorKeyboard(strategies);
 
     await ctx.reply(message, { parse_mode: "Markdown", ...keyboard });

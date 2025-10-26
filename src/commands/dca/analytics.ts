@@ -4,6 +4,7 @@
 
 import { previewTokenForToken } from "../../services/raydium";
 import { getTokenPairBySymbols } from "../../services/db/tokenPair/operations";
+import { fromSmallestUnit } from "./utils";
 
 export interface StrategyAnalytics {
   totalInvested: number;
@@ -33,6 +34,10 @@ export interface PortfolioAnalytics {
 
 /**
  * Calculate analytics for a single DCA strategy
+ *
+ * All values are calculated in terms of the base token (e.g., SOL).
+ * The current value is determined by fetching the real-time market price
+ * from Raydium and converting the token holdings to base token value.
  */
 export async function calculateStrategyAnalytics(
   strategy: any,
@@ -42,17 +47,33 @@ export async function calculateStrategyAnalytics(
   const successfulExecutions = executions.filter((e) => e.status === "SUCCESS");
   const failedExecutions = executions.filter((e) => e.status === "FAILED");
 
+  console.log(`[Analytics] Strategy ${strategy.id} - Raw execution data:`);
+  successfulExecutions.forEach((e, idx) => {
+    const investedAmount = fromSmallestUnit(e.amountInvested, strategy.baseTokenDecimals);
+    const receivedAmount = fromSmallestUnit(e.tokensReceived, strategy.targetTokenDecimals);
+    const price = investedAmount / receivedAmount;
+    console.log(`[Analytics]   Execution ${idx + 1}:`);
+    console.log(`[Analytics]     - Invested: ${investedAmount}`);
+    console.log(`[Analytics]     - Received: ${receivedAmount} tokens`);
+    console.log(`[Analytics]     - Price paid: ${price.toFixed(8)} ${strategy.baseToken}/token`);
+  });
+
   const totalTokensReceived = successfulExecutions.reduce(
-    (sum, e) => sum + Number(e.tokensReceived),
+    (sum, e) => sum + fromSmallestUnit(e.tokensReceived, strategy.targetTokenDecimals),
     0
   );
 
-  const totalInvested = Number(strategy.totalInvested);
+  const totalInvested = fromSmallestUnit(strategy.totalInvested, strategy.baseTokenDecimals);
   const averageBuyPrice = totalInvested > 0 && totalTokensReceived > 0
     ? totalInvested / totalTokensReceived
     : 0;
 
-  // Get current price
+  console.log(`[Analytics] Strategy ${strategy.id} (${strategy.baseToken} → ${strategy.targetToken}):`);
+  console.log(`[Analytics]   - Total invested: ${totalInvested} ${strategy.baseToken}`);
+  console.log(`[Analytics]   - Total tokens received (summed): ${totalTokensReceived} ${strategy.targetToken}`);
+  console.log(`[Analytics]   - Average buy price: ${averageBuyPrice} ${strategy.baseToken}/${strategy.targetToken}`);
+
+  // Get current price in base token terms (e.g., SOL per target token)
   let currentPrice = 0;
   let currentValue = 0;
 
@@ -68,15 +89,32 @@ export async function calculateStrategyAnalytics(
         throw new Error("Token pair not found");
       }
 
-      // Get current price by checking how much we'd get for selling 1 target token
+      console.log(`[Analytics] Token pair lookup:`);
+      console.log(`[Analytics]   - Base: ${tokenPair.baseToken} (${tokenPair.baseMint})`);
+      console.log(`[Analytics]   - Target: ${tokenPair.targetToken} (${tokenPair.targetMint})`);
+      console.log(`[Analytics] Querying: Sell ${totalTokensReceived} ${tokenPair.targetToken} for ${tokenPair.baseToken}`);
+
+      // Get current market price from Raydium by simulating selling totalTokensReceived for base token
+      // This gives us the TOTAL current value directly
       const quote = await previewTokenForToken({
         inputTokenMint: tokenPair.targetMint,
         outputTokenMint: tokenPair.baseMint,
-        inputTokenAmount: 1, // Get price for 1 token
+        inputTokenAmount: totalTokensReceived, // Use actual holdings amount
       });
 
-      currentPrice = parseFloat(quote.outputAmount);
-      currentValue = totalTokensReceived * currentPrice;
+      console.log(`[Analytics] Strategy ${strategy.id} (${strategy.targetToken}):`);
+      console.log(`[Analytics]   - Total tokens: ${totalTokensReceived}`);
+      console.log(`[Analytics]   - Quote output: ${quote.outputAmount} ${strategy.baseToken}`);
+
+      // currentValue is the direct quote output (what we'd get if we sold all tokens now)
+      currentValue = parseFloat(quote.outputAmount);
+
+      // currentPrice per token = total value / total tokens
+      currentPrice = currentValue / totalTokensReceived;
+
+      console.log(`[Analytics]   - Current value: ${currentValue} ${strategy.baseToken}`);
+      console.log(`[Analytics]   - Current price per token: ${currentPrice} ${strategy.baseToken}`);
+      console.log(`[Analytics]   - Average buy price: ${averageBuyPrice} ${strategy.baseToken}`);
     }
   } catch (error) {
     console.error("[Analytics] Error fetching current price:", error);
@@ -134,8 +172,8 @@ export async function calculatePortfolioAnalytics(
     } catch (error) {
       console.error(`[Analytics] Error calculating analytics for strategy ${strategy.id}:`, error);
       // Fallback to just adding total invested
-      totalInvested += Number(strategy.totalInvested);
-      totalCurrentValue += Number(strategy.totalInvested);
+      totalInvested += fromSmallestUnit(strategy.totalInvested, strategy.baseTokenDecimals);
+      totalCurrentValue += fromSmallestUnit(strategy.totalInvested, strategy.baseTokenDecimals);
     }
   }
 
@@ -169,6 +207,18 @@ export async function calculatePortfolioAnalytics(
  */
 export function formatNumber(num: number, decimals: number = 4): string {
   return num.toFixed(decimals);
+}
+
+/**
+ * Format large token amounts with abbreviations (M, K)
+ */
+export function formatTokenAmount(amount: number): string {
+  if (amount >= 1000000) {
+    return `${(amount / 1000000).toFixed(1)}M`;
+  } else if (amount >= 1000) {
+    return `${(amount / 1000).toFixed(1)}K`;
+  }
+  return formatNumber(amount, 2);
 }
 
 /**

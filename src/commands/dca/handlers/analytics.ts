@@ -235,9 +235,7 @@ export function registerAnalyticsHandlers(bot: Telegraf) {
       const strategies = await getUserDcaStrategies(user.id);
       const allExecutions = await getUserExecutions(user.id, 1000); // Get all executions
 
-      const analytics = await calculatePortfolioAnalytics(strategies, allExecutions);
-
-      const message = buildPortfolioStatsMessage(analytics);
+      const message = await buildPortfolioStatsMessage(strategies, allExecutions);
       const keyboard = buildPortfolioStatsKeyboard();
 
       await ctx.editMessageText(message, {
@@ -268,9 +266,7 @@ export function registerAnalyticsHandlers(bot: Telegraf) {
       const strategies = await getUserDcaStrategies(user.id);
       const allExecutions = await getUserExecutions(user.id, 1000);
 
-      const analytics = await calculatePortfolioAnalytics(strategies, allExecutions);
-
-      const message = buildPortfolioStatsMessage(analytics);
+      const message = await buildPortfolioStatsMessage(strategies, allExecutions);
       const keyboard = buildPortfolioStatsKeyboard();
 
       await ctx.editMessageText(message, {
@@ -314,7 +310,7 @@ export function registerAnalyticsHandlers(bot: Telegraf) {
         return;
       }
 
-      const message = buildHistorySelectorMessage(strategies);
+      const message = buildHistorySelectorMessage();
       const keyboard = buildHistorySelectorKeyboard(strategies);
 
       await ctx.editMessageText(message, {

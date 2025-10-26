@@ -69,3 +69,46 @@ export function getStatusEmoji(status: string): string {
   };
   return statusEmojiMap[status] || "⚪";
 }
+
+/**
+ * Convert a human-readable amount to smallest unit (e.g., SOL to lamports)
+ * @param amount - Amount in human-readable units (e.g., "1.5")
+ * @param decimals - Number of decimal places (e.g., 9 for SOL)
+ * @returns Amount in smallest unit as BigInt
+ */
+export function toSmallestUnit(amount: number, decimals: number): bigint {
+  // Convert to string to avoid floating point issues
+  const amountStr = amount.toString();
+  const [whole, fraction = ''] = amountStr.split('.');
+
+  // Pad or truncate fraction to match decimals
+  const paddedFraction = fraction.padEnd(decimals, '0').slice(0, decimals);
+
+  // Combine whole and fraction parts
+  const smallestUnitStr = whole + paddedFraction;
+
+  return BigInt(smallestUnitStr);
+}
+
+/**
+ * Convert smallest unit to human-readable amount (e.g., lamports to SOL)
+ * @param smallestUnit - Amount in smallest unit as BigInt
+ * @param decimals - Number of decimal places (e.g., 9 for SOL)
+ * @returns Amount in human-readable units as number
+ */
+export function fromSmallestUnit(smallestUnit: bigint, decimals: number): number {
+  const divisor = 10 ** decimals;
+  return Number(smallestUnit) / divisor;
+}
+
+/**
+ * Format smallest unit for display (e.g., lamports to "1.5 SOL")
+ * @param smallestUnit - Amount in smallest unit as BigInt
+ * @param decimals - Number of decimal places
+ * @param maxDecimals - Maximum decimal places to show in output (default: 6)
+ * @returns Formatted string
+ */
+export function formatSmallestUnit(smallestUnit: bigint, decimals: number, maxDecimals: number = 6): string {
+  const amount = fromSmallestUnit(smallestUnit, decimals);
+  return amount.toFixed(maxDecimals).replace(/\.?0+$/, '');
+}
