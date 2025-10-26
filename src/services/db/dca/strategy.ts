@@ -71,7 +71,10 @@ export async function pauseDcaStrategy(strategyId: string) {
 export async function resumeDcaStrategy(strategyId: string) {
   return prisma.dcaStrategy.update({
     where: { id: strategyId },
-    data: { status: 'ACTIVE' },
+    data: {
+      status: 'ACTIVE',
+      consecutiveFailures: 0, // Reset failure count when user resumes
+    },
   });
 }
 

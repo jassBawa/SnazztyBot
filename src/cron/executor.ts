@@ -5,7 +5,7 @@ import {
   incrementStrategyFailures
 } from '../services/db/dca';
 import { getTokenPairBySymbols } from '../services/db/tokenPair/operations';
-import { getOrCreateUserKeypair } from '../services/solana';
+import { getOrCreateUserKeypair, hasSufficientBalance } from '../services/solana';
 import { swapSolForToken } from '../services/raydium';
 import { calculateNextExecutionTime, fromSmallestUnit, toSmallestUnit } from '../commands/dca/utils';
 import type { StrategyWithUser, ExecutionResult } from './types';
@@ -31,6 +31,18 @@ async function executeDcaStrategy(strategy: StrategyWithUser): Promise<Execution
     const solAmount = fromSmallestUnit(strategy.amountPerInterval, strategy.baseTokenDecimals);
     const targetTokenMint = tokenPair.targetMint;
 
+    // Check if user has sufficient balance (including buffer for transaction fees)
+    const balanceCheck = await hasSufficientBalance(userKeypair.publicKey, solAmount, 0.01);
+
+    if (!balanceCheck.sufficient) {
+      throw new Error(
+        `Insufficient balance: Need ${balanceCheck.required.toFixed(4)} SOL ` +
+        `(${solAmount} SOL + 0.01 SOL for fees), but only have ${balanceCheck.currentBalance.toFixed(4)} SOL. ` +
+        `Please add funds to continue DCA.`
+      );
+    }
+
+    console.log(`[DCA Executor] Balance check passed: ${balanceCheck.currentBalance.toFixed(4)} SOL available`);
     console.log(`[DCA Executor] Executing swap: ${solAmount} ${strategy.baseToken} → ${strategy.targetToken}`);
     console.log(`[DCA Executor] Token mint: ${targetTokenMint}`);
 

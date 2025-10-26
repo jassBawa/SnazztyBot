@@ -100,6 +100,37 @@ export async function getBalances(pubkey: PublicKey): Promise<Balances> {
 }
 
 /**
+ * Get SOL balance in lamports (raw amount)
+ */
+export async function getSolBalanceLamports(pubkey: PublicKey): Promise<number> {
+  const connection = getConnection();
+  return await connection.getBalance(pubkey);
+}
+
+/**
+ * Check if user has sufficient SOL balance for a transaction
+ * @param pubkey User's public key
+ * @param requiredSol Amount of SOL required (in SOL, not lamports)
+ * @param bufferSol Extra SOL to keep for transaction fees (default 0.01 SOL)
+ * @returns true if sufficient balance, false otherwise
+ */
+export async function hasSufficientBalance(
+  pubkey: PublicKey,
+  requiredSol: number,
+  bufferSol: number = 0.01
+): Promise<{ sufficient: boolean; currentBalance: number; required: number }> {
+  const lamports = await getSolBalanceLamports(pubkey);
+  const currentBalance = lamports / 1_000_000_000;
+  const required = requiredSol + bufferSol;
+
+  return {
+    sufficient: currentBalance >= required,
+    currentBalance,
+    required,
+  };
+}
+
+/**
  * Validate if a string is a valid Solana address
  */
 export function isValidSolanaAddress(address: string): boolean {

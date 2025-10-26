@@ -95,7 +95,7 @@ model TokenPair {
   baseTokenDecimals   Int      @default(9)  // e.g., SOL = 9
   targetToken         String
   targetMint          String
-  targetTokenDecimals Int      @default(9)  // e.g., most SPL tokens = 6 or 9
+  targetTokenDecimals Int      @default(9)
   active              Boolean  @default(true)
   createdAt           DateTime @default(now())
 
