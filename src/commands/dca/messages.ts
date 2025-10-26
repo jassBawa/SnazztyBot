@@ -7,6 +7,7 @@ import { Markup } from "telegraf";
 import { DcaSession, DcaFrequency } from "./types";
 import { calculateNextExecutionTime, getFrequencyDisplay, getStatusEmoji, formatSmallestUnit } from "./utils";
 import { StrategyAnalytics, formatNumber, formatPnL, formatTokenAmount, calculateStrategyAnalytics } from "./analytics";
+import { getSolPriceUSD, formatUSD } from "../../services/price";
 
 /**
  * Build token pair selection message and keyboard
@@ -242,42 +243,68 @@ export function buildStrategyListKeyboard(strategies: any[]) {
  * @param analytics - Calculated analytics
  * @returns Formatted message
  */
-export function buildStrategyDetailMessage(
+export async function buildStrategyDetailMessage(
   strategy: any,
   analytics: StrategyAnalytics
-): string {
+): Promise<string> {
   const statusEmoji = getStatusEmoji(strategy.status);
   const formattedAmount = formatSmallestUnit(strategy.amountPerInterval, strategy.baseTokenDecimals);
 
-  let message = `📊 *Strategy Details*\n\n`;
+  // Fetch SOL price in USD
+  const solPrice = await getSolPriceUSD();
+  const showUSD = solPrice !== null && strategy.baseToken === 'SOL';
+
+  let message = `📊 *Strategy Overview*\n\n`;
   message += `${statusEmoji} *${strategy.baseToken} → ${strategy.targetToken}*\n\n`;
 
-  message += `*Configuration:*\n`;
-  message += `Amount: ${formattedAmount} ${strategy.baseToken}\n`;
-  message += `Frequency: ${getFrequencyDisplay(strategy.frequency)}\n`;
-  message += `Status: ${strategy.status}\n`;
+  message += `⚙️ *Configuration*\n`;
+  message += `┌─ 💰 Amount: ${formattedAmount} ${strategy.baseToken}`;
+  if (showUSD) {
+    const amountUSD = parseFloat(formattedAmount) * solPrice;
+    message += ` (${formatUSD(amountUSD)})`;
+  }
+  message += `\n`;
+  message += `├─ ⏰ Frequency: ${getFrequencyDisplay(strategy.frequency)}\n`;
+  message += `└─ 📍 Status: *${strategy.status}*`;
 
   if (strategy.status === "ACTIVE") {
-    message += `Next Run: ${new Date(strategy.nextExecutionTime).toLocaleString()}\n`;
+    message += `\n   ⏳ Next: ${new Date(strategy.nextExecutionTime).toLocaleString()}`;
   }
+  message += `\n`;
 
   if (strategy.consecutiveFailures > 0) {
-    message += `⚠️ Consecutive Failures: ${strategy.consecutiveFailures}/3\n`;
+    message += `\n⚠️ *Consecutive Failures: ${strategy.consecutiveFailures}/3*\n`;
   }
 
-  message += `\n*Performance (in ${strategy.baseToken}):*\n`;
-  message += `Total Invested: ${formatNumber(analytics.totalInvested)} ${strategy.baseToken}\n`;
-  message += `Tokens Received: ${formatNumber(analytics.totalTokensReceived)} ${strategy.targetToken}\n`;
-  message += `Average Buy Price: ${formatNumber(analytics.averageBuyPrice)} ${strategy.baseToken}/${strategy.targetToken}\n`;
-  message += `Current Price: ${formatNumber(analytics.currentPrice)} ${strategy.baseToken}/${strategy.targetToken}\n`;
-  message += `Current Value: ${formatNumber(analytics.currentValue)} ${strategy.baseToken}\n`;
-  message += `PnL: ${formatPnL(analytics.pnl, analytics.pnlPercentage)} ${strategy.baseToken}\n\n`;
+  message += `\n`;
 
-  message += `*Execution Stats:*\n`;
-  message += `Total Executions: ${strategy.executionCount}\n`;
-  message += `Successful: ${analytics.successfulExecutions} ✅\n`;
-  message += `Failed: ${analytics.failedExecutions} ❌\n`;
-  message += `Success Rate: ${formatNumber(analytics.successRate, 2)}%\n`;
+  if (showUSD) {
+    message += `📈 *Performance*\n`;
+    message += `┌─ 💵 Invested: ${formatNumber(analytics.totalInvested)} ${strategy.baseToken} (${formatUSD(analytics.totalInvested * solPrice)})\n`;
+    message += `├─ 🪙 Received: ${formatNumber(analytics.totalTokensReceived)} ${strategy.targetToken}\n`;
+    message += `├─ 📊 Avg Price: ${formatNumber(analytics.averageBuyPrice, 6)} ${strategy.baseToken} (${formatUSD(analytics.averageBuyPrice * solPrice)})\n`;
+    message += `├─ 💹 Current Price: ${formatNumber(analytics.currentPrice, 6)} ${strategy.baseToken} (${formatUSD(analytics.currentPrice * solPrice)})\n`;
+    message += `├─ 💎 Current Value: ${formatNumber(analytics.currentValue)} ${strategy.baseToken} (${formatUSD(analytics.currentValue * solPrice)})\n`;
+
+    const pnlUSD = analytics.pnl * solPrice;
+    const pnlEmoji = pnlUSD >= 0 ? "📈" : "📉";
+    const pnlSign = pnlUSD >= 0 ? "+" : "";
+    message += `└─ ${pnlEmoji} *P&L: ${pnlSign}${formatNumber(Math.abs(analytics.pnl), 4)} ${strategy.baseToken} (${formatUSD(Math.abs(pnlUSD))} / ${pnlSign}${formatNumber(analytics.pnlPercentage, 2)}%)*\n\n`;
+  } else {
+    message += `📈 *Performance*\n`;
+    message += `┌─ 💵 Invested: ${formatNumber(analytics.totalInvested)} ${strategy.baseToken}\n`;
+    message += `├─ 🪙 Received: ${formatNumber(analytics.totalTokensReceived)} ${strategy.targetToken}\n`;
+    message += `├─ 📊 Avg Price: ${formatNumber(analytics.averageBuyPrice)} ${strategy.baseToken}/${strategy.targetToken}\n`;
+    message += `├─ 💹 Current Price: ${formatNumber(analytics.currentPrice)} ${strategy.baseToken}/${strategy.targetToken}\n`;
+    message += `├─ 💎 Current Value: ${formatNumber(analytics.currentValue)} ${strategy.baseToken}\n`;
+    message += `└─ ${formatPnL(analytics.pnl, analytics.pnlPercentage)} ${strategy.baseToken}\n\n`;
+  }
+
+  message += `📊 *Execution Statistics*\n`;
+  message += `┌─ 🎯 Total: ${strategy.executionCount}\n`;
+  message += `├─ ✅ Success: ${analytics.successfulExecutions}\n`;
+  message += `├─ ❌ Failed: ${analytics.failedExecutions}\n`;
+  message += `└─ 📈 Success Rate: *${formatNumber(analytics.successRate, 2)}%*\n`;
 
   return message;
 }
@@ -333,36 +360,124 @@ export async function buildPortfolioStatsMessage(
   strategies: any[],
   allExecutions: any[]
 ): Promise<string> {
-  let message = `📋 *Your DCA Strategies*\n`;
-  message += `━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  // Fetch SOL price once for all strategies
+  const solPrice = await getSolPriceUSD();
+  const showUSD = solPrice !== null;
+
+  // Calculate portfolio totals
+  let totalInvestedSOL = 0;
+  let totalValueSOL = 0;
+  let totalPnLSOL = 0;
+  let activeCount = 0;
+  let pausedCount = 0;
+
+  let message = `📊 *Portfolio Overview*\n\n`;
+
+  if (showUSD) {
+    message += `💵 *Market Price*\n`;
+    message += `SOL: ${formatUSD(solPrice)}\n`;
+    message += `\n`;
+  }
 
   // Loop through each strategy and show individual performance
+  let strategyDetails = '';
   for (const strategy of strategies) {
     const statusEmoji = getStatusEmoji(strategy.status);
     const strategyExecutions = allExecutions.filter(e => e.strategyId === strategy.id);
+    const isSOL = strategy.baseToken === 'SOL';
+
+    // Count active/paused strategies
+    if (strategy.status === 'ACTIVE') activeCount++;
+    if (strategy.status === 'PAUSED') pausedCount++;
 
     try {
       // Calculate analytics for this strategy
       const analytics = await calculateStrategyAnalytics(strategy, strategyExecutions);
+
+      // Accumulate totals (only for SOL strategies)
+      if (isSOL) {
+        totalInvestedSOL += analytics.totalInvested;
+        totalValueSOL += analytics.currentValue;
+        totalPnLSOL += analytics.pnl;
+      }
 
       // Format PnL emoji
       const pnlEmoji = analytics.pnl >= 0 ? "📈" : "📉";
       const pnlSign = analytics.pnl >= 0 ? "+" : "";
 
       // Build the strategy display
-      message += `${statusEmoji} *${strategy.baseToken} → ${strategy.targetToken}*\n`;
-      message += `├ Invested: ${formatNumber(analytics.totalInvested, 4)} ${strategy.baseToken}\n`;
-      message += `├ Holdings: ${formatTokenAmount(analytics.totalTokensReceived)} ${strategy.targetToken} (~${formatNumber(analytics.currentValue, 4)} ${strategy.baseToken})\n`;
-      message += `└ ${pnlEmoji} PnL: ${pnlSign}${formatNumber(analytics.pnl, 4)} ${strategy.baseToken} (${pnlSign}${formatNumber(analytics.pnlPercentage, 2)}%)\n\n`;
+      strategyDetails += `\n${statusEmoji} *${strategy.baseToken} → ${strategy.targetToken}*\n`;
+      strategyDetails += `┌─ 💰 Invested: ${formatNumber(analytics.totalInvested, 4)} ${strategy.baseToken}`;
+
+      if (showUSD && isSOL) {
+        const investedUSD = analytics.totalInvested * solPrice;
+        strategyDetails += ` (${formatUSD(investedUSD)})`;
+      }
+      strategyDetails += `\n`;
+
+      strategyDetails += `├─ 🪙 Holdings: ${formatTokenAmount(analytics.totalTokensReceived)} ${strategy.targetToken}\n`;
+      strategyDetails += `├─ 📊 Value: ${formatNumber(analytics.currentValue, 4)} ${strategy.baseToken}`;
+
+      if (showUSD && isSOL) {
+        const valueUSD = analytics.currentValue * solPrice;
+        strategyDetails += ` (${formatUSD(valueUSD)})`;
+      }
+      strategyDetails += `\n`;
+
+      strategyDetails += `└─ ${pnlEmoji} P&L: ${pnlSign}${formatNumber(Math.abs(analytics.pnl), 4)} ${strategy.baseToken}`;
+
+      if (showUSD && isSOL) {
+        const pnlUSD = analytics.pnl * solPrice;
+        strategyDetails += ` (${formatUSD(Math.abs(pnlUSD))})`;
+      }
+      strategyDetails += ` *${pnlSign}${formatNumber(analytics.pnlPercentage, 2)}%*\n`;
+
     } catch (error) {
       console.error(`[Messages] Error calculating analytics for strategy ${strategy.id}:`, error);
       // Fallback display if analytics fails
-      message += `${statusEmoji} *${strategy.baseToken} → ${strategy.targetToken}*\n`;
-      message += `├ Invested: ${formatNumber(Number(strategy.totalInvested), 4)} ${strategy.baseToken}\n`;
-      message += `├ Holdings: Calculating...\n`;
-      message += `└ PnL: Calculating...\n\n`;
+      strategyDetails += `\n${statusEmoji} *${strategy.baseToken} → ${strategy.targetToken}*\n`;
+      strategyDetails += `├─ Calculating...\n`;
+      strategyDetails += `└─ Please refresh\n`;
     }
   }
+
+  // Add portfolio summary
+  if (totalInvestedSOL > 0) {
+    const portfolioPnLPercentage = (totalPnLSOL / totalInvestedSOL) * 100;
+    const pnlEmoji = totalPnLSOL >= 0 ? "📈" : "📉";
+    const pnlSign = totalPnLSOL >= 0 ? "+" : "";
+
+    message += `📈 *Total Portfolio (SOL)*\n`;
+    message += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    message += `💰 Invested: ${formatNumber(totalInvestedSOL, 4)} SOL`;
+    if (showUSD) {
+      message += ` (${formatUSD(totalInvestedSOL * solPrice)})`;
+    }
+    message += `\n`;
+
+    message += `📊 Current: ${formatNumber(totalValueSOL, 4)} SOL`;
+    if (showUSD) {
+      message += ` (${formatUSD(totalValueSOL * solPrice)})`;
+    }
+    message += `\n`;
+
+    message += `${pnlEmoji} P&L: ${pnlSign}${formatNumber(Math.abs(totalPnLSOL), 4)} SOL`;
+    if (showUSD) {
+      message += ` (${formatUSD(Math.abs(totalPnLSOL * solPrice))})`;
+    }
+    message += ` *${pnlSign}${formatNumber(portfolioPnLPercentage, 2)}%*\n\n`;
+  }
+
+  message += `🎯 *Active Strategies: ${activeCount}*`;
+  if (pausedCount > 0) {
+    message += ` | ⏸️ Paused: ${pausedCount}`;
+  }
+  message += `\n`;
+
+  // Add individual strategy details
+  message += `\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+  message += `*Individual Strategies*`;
+  message += strategyDetails;
 
   return message;
 }

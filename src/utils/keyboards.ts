@@ -10,7 +10,7 @@ import { Markup } from "telegraf";
  */
 export const mainMenuKeyboard = () => {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("💰 Wallet Balance", "ACTION_WALLET_BALANCE")],
+    [Markup.button.callback("💰 Wallet Balance", "WALLET_BALANCE")],
     [
       Markup.button.callback("🟢 Buy Token", "ACTION_SWAP_BUY"),
       Markup.button.callback("🔴 Sell Token", "ACTION_SWAP_SELL"),
@@ -29,7 +29,7 @@ export const mainMenuKeyboard = () => {
  */
 export const balanceKeyboard = () => {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("🔄 Refresh Balance", "ACTION_WALLET_BALANCE")],
+    [Markup.button.callback("🔄 Refresh Balance", "WALLET_BALANCE")],
     [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
   ]);
 };

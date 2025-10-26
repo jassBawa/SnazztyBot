@@ -1,7 +1,7 @@
 import { message } from 'telegraf/filters';
 import bot from './bot';
 import { registerCommands } from './commands';
-import './cron'; // Start DCA execution cron job
+// import './cron'; // Start DCA execution cron job
 
 // Register modular commands first
 registerCommands(bot);
@@ -11,9 +11,9 @@ bot.help((ctx) =>
   ctx.reply(
     `📖 *Available Commands*\\n\\n` +
     `💰 *Wallet:*\\n` +
-    `/start - Create your wallet\\n` +
-    `/balance or /b - Quick balance check ⚡\\n` +
+    `/start - Create your wallet & access main menu\\n` +
     `/address or /addr - Show wallet address with QR\\n` +
+    `/portfolio or /p - View total portfolio value (SOL + tokens)\\n` +
     `🔄 *Trading:*\\n` +
     `/swap - Open swap menu\\n` +
     `/buy - Buy tokens quickly ⚡\\n` +
@@ -25,10 +25,13 @@ bot.help((ctx) =>
     `/dca_list or /dcas - View & manage your DCA strategies\\n` +
     `/dca_stats - View portfolio analytics & PnL\\n` +
     `/dca_history or /dca_txns - View transaction history\\n\\n` +
+    `💵 *Market Data:*\\n` +
+    `/price or /sol - Check current SOL price in USD\\n\\n` +
     `🛠️ *Utilities:*\\n` +
     `/refresh or /r - Refresh data\\n` +
     `/about - Your info\\n` +
-    `/help - Show this message`,
+    `/help - Show this message\\n\\n` +
+    `💡 *Tip:* Use the 💰 Wallet Balance button in the main menu to check your balance!`,
     { parse_mode: 'Markdown' }
   )
 );
@@ -40,8 +43,8 @@ bot.hears('hi', (ctx) => ctx.reply('Hey there'));
 async function setupBot() {
   try {
     await bot.telegram.setMyCommands([
-      { command: 'start', description: '🚀 Create your wallet' },
-      { command: 'balance', description: '💰 Quick balance check' },
+      { command: 'start', description: '🚀 Create wallet & main menu' },
+      { command: 'portfolio', description: '📊 View total portfolio value' },
       { command: 'address', description: '📍 Show wallet address + QR' },
       { command: 'wallet_send', description: '📤 Send SOL to another address' },
       { command: 'swap', description: '🔄 Open swap menu' },
@@ -52,6 +55,7 @@ async function setupBot() {
       { command: 'dca_list', description: '📋 View & manage DCA strategies' },
       { command: 'dca_stats', description: '📈 View portfolio analytics & PnL' },
       { command: 'dca_history', description: '📜 View transaction history' },
+      { command: 'price', description: '💵 Check current SOL price (USD)' },
       { command: 'cancel', description: '❌ Cancel current operation' },
       { command: 'refresh', description: '🔄 Refresh data' },
       { command: 'about', description: 'ℹ️ About this bot' },

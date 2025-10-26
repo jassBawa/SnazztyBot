@@ -27,7 +27,7 @@ export function registerManagementHandlers(bot: Telegraf) {
           strategyWithExecs,
           strategyWithExecs.executions
         );
-        const message = buildStrategyDetailMessage(strategyWithExecs, analytics);
+        const message = await buildStrategyDetailMessage(strategyWithExecs, analytics);
         const keyboard = buildStrategyDetailKeyboard(strategyWithExecs);
 
         await ctx.editMessageText(message, {

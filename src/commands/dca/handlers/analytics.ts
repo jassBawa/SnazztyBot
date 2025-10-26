@@ -35,11 +35,17 @@ export function registerAnalyticsHandlers(bot: Telegraf) {
     try {
       const strategyId = ctx.match[1];
 
+      // Show loading message
+      await ctx.editMessageText("⏳ *Loading strategy details...*\n\nFetching data and calculating analytics...", {
+        parse_mode: "Markdown",
+      });
+      await ctx.answerCbQuery();
+
       // Fetch strategy with executions
       const strategyWithExecs = await getStrategyWithExecutions(strategyId);
 
       if (!strategyWithExecs) {
-        await ctx.answerCbQuery("Strategy not found");
+        await ctx.editMessageText("❌ Strategy not found", { parse_mode: "Markdown" });
         return;
       }
 
@@ -49,18 +55,16 @@ export function registerAnalyticsHandlers(bot: Telegraf) {
         strategyWithExecs.executions
       );
 
-      const message = buildStrategyDetailMessage(strategyWithExecs, analytics);
+      const message = await buildStrategyDetailMessage(strategyWithExecs, analytics);
       const keyboard = buildStrategyDetailKeyboard(strategyWithExecs);
 
       await ctx.editMessageText(message, {
         parse_mode: "Markdown",
         ...keyboard,
       });
-
-      await ctx.answerCbQuery();
     } catch (error: any) {
       console.error(`[DCA] Error viewing strategy detail:`, error);
-      await ctx.answerCbQuery(`Error: ${error?.message}`);
+      await ctx.editMessageText(`❌ Error: ${error?.message}`, { parse_mode: "Markdown" });
     }
   });
 
@@ -85,7 +89,7 @@ export function registerAnalyticsHandlers(bot: Telegraf) {
         strategyWithExecs.executions
       );
 
-      const message = buildStrategyDetailMessage(strategyWithExecs, analytics);
+      const message = await buildStrategyDetailMessage(strategyWithExecs, analytics);
       const keyboard = buildStrategyDetailKeyboard(strategyWithExecs);
 
       await ctx.editMessageText(message, {
@@ -172,7 +176,7 @@ export function registerAnalyticsHandlers(bot: Telegraf) {
           strategyWithExecs,
           strategyWithExecs.executions
         );
-        const message = buildStrategyDetailMessage(strategyWithExecs, analytics);
+        const message = await buildStrategyDetailMessage(strategyWithExecs, analytics);
         const keyboard = buildStrategyDetailKeyboard(strategyWithExecs);
 
         await ctx.editMessageText(message, {
@@ -224,11 +228,17 @@ export function registerAnalyticsHandlers(bot: Telegraf) {
    */
   bot.action("DCA_PORTFOLIO_STATS", async (ctx) => {
     try {
+      // Show loading message
+      await ctx.editMessageText("⏳ *Loading portfolio stats...*\n\nAnalyzing all strategies and calculating PnL...", {
+        parse_mode: "Markdown",
+      });
+      await ctx.answerCbQuery();
+
       const telegramId = getTelegramId(ctx);
       const user = await getUserByTelegramId(telegramId);
 
       if (!user) {
-        await ctx.answerCbQuery("User not found");
+        await ctx.editMessageText("❌ User not found", { parse_mode: "Markdown" });
         return;
       }
 
@@ -242,11 +252,9 @@ export function registerAnalyticsHandlers(bot: Telegraf) {
         parse_mode: "Markdown",
         ...keyboard,
       });
-
-      await ctx.answerCbQuery();
     } catch (error: any) {
       console.error(`[DCA] Error viewing portfolio stats:`, error);
-      await ctx.answerCbQuery(`Error: ${error?.message}`);
+      await ctx.editMessageText(`❌ Error: ${error?.message}`, { parse_mode: "Markdown" });
     }
   });
 
