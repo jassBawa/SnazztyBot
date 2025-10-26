@@ -1,0 +1,32 @@
+{
+  "name": "@repo/services",
+  "version": "1.0.0",
+  "exports": {
+    "./solana": "./src/solana.ts",
+    "./raydium": "./src/raydium.ts",
+    "./encryption": "./src/encryption.ts",
+    "./portfolio": "./src/portfolio.ts",
+    "./price": "./src/price.ts",
+    "./dca-utils": "./src/dca/utils.ts"
+  },
+  "scripts": {
+    "dev": "tsup src/* --watch"
+  },
+  "dependencies": {
+    "@repo/database": "workspace:*",
+    "@prisma/client": "^6.18.0",
+    "@raydium-io/raydium-sdk-v2": "0.2.30-alpha",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.95.3",
+    "bn.js": "^5.2.2",
+    "decimal.js": "^10.6.0",
+    "dotenv": "^17.2.2"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/bn.js": "^5.2.0",
+    "@types/node": "^24.9.1",
+    "tsup": "^8.0.2",
+    "typescript": "5.5.4"
+  }
+}
