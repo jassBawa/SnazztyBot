@@ -6,22 +6,24 @@ export interface CreateStrategyParams {
   userId: number;
   baseToken: string;
   targetToken: string;
-  amountPerInterval: string;
+  amountPerInterval: bigint;
   frequency: DcaFrequency;
   nextExecutionTime: Date;
+  baseTokenDecimals: number;
+  targetTokenDecimals: number;
 }
 
 export interface UpdateStrategyAfterExecutionParams {
   strategyId: string;
   nextExecutionTime: Date;
-  amountInvested: string;
+  amountInvested: bigint;
 }
 
 export interface RecordExecutionParams {
   strategyId: string;
-  amountInvested: string;
-  tokensReceived: string;
-  executionPrice: string;
+  amountInvested: bigint;
+  tokensReceived: bigint;
+  executionPrice: bigint;
   txHash?: string;
   status: ExecutionStatus;
   errorMessage?: string;

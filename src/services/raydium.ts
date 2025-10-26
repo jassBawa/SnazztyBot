@@ -1,4 +1,4 @@
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { Keypair, PublicKey } from '@solana/web3.js';
 import {
   Raydium,
   TxVersion,
@@ -7,11 +7,18 @@ import {
   Token,
   TokenAmount,
   toApiV3Token,
-} from "@raydium-io/raydium-sdk-v2";
-import { getConnection, getTokenDecimals, isToken2022, getTokenProgramId, ensureTokenAccount } from "./solana";
+} from '@raydium-io/raydium-sdk-v2';
+import {
+  getConnection,
+  getTokenDecimals,
+  isToken2022,
+  getTokenProgramId,
+  ensureTokenAccount,
+  getToken2022Extensions,
+} from './solana';
 
 // Constants
-const SOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
+const SOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 const DEFAULT_SLIPPAGE = 0.01; // 1%
 const DEFAULT_TOKEN_DECIMALS = 9;
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -34,9 +41,11 @@ interface QuoteResult {
 /**
  * Initialize Raydium SDK instance with user's keypair
  */
-async function getRaydiumInstance(owner: Keypair): Promise<Raydium> {
+export async function getRaydiumInstance(owner: Keypair): Promise<Raydium> {
   const connection = getConnection();
-  const cluster = (process.env.SOLANA_CLUSTER || "devnet") as "mainnet" | "devnet";
+  const cluster = (process.env.SOLANA_CLUSTER || 'devnet') as
+    | 'mainnet'
+    | 'devnet';
 
   const raydium = await Raydium.load({
     owner,
@@ -55,8 +64,12 @@ async function getRaydiumInstance(owner: Keypair): Promise<Raydium> {
 function getPoolProgramIds(isDevnet: boolean) {
   return {
     amm: isDevnet ? DEVNET_PROGRAM_ID.AMM_V4 : ALL_PROGRAM_ID.AMM_V4,
-    clmm: isDevnet ? DEVNET_PROGRAM_ID.CLMM_PROGRAM_ID : ALL_PROGRAM_ID.CLMM_PROGRAM_ID,
-    cpmm: isDevnet ? DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_PROGRAM : ALL_PROGRAM_ID.CREATE_CPMM_POOL_PROGRAM,
+    clmm: isDevnet
+      ? DEVNET_PROGRAM_ID.CLMM_PROGRAM_ID
+      : ALL_PROGRAM_ID.CLMM_PROGRAM_ID,
+    cpmm: isDevnet
+      ? DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_PROGRAM
+      : ALL_PROGRAM_ID.CREATE_CPMM_POOL_PROGRAM,
     router: isDevnet ? DEVNET_PROGRAM_ID.Router : ALL_PROGRAM_ID.Router,
   };
 }
@@ -65,9 +78,9 @@ function getPoolProgramIds(isDevnet: boolean) {
  * Create explorer link for a transaction
  */
 function createExplorerLink(txId: string): string {
-  const cluster = process.env.SOLANA_CLUSTER || "devnet";
+  const cluster = process.env.SOLANA_CLUSTER || 'devnet';
   return `https://explorer.solana.com/tx/${txId}${
-    cluster !== "mainnet-beta" ? `?cluster=${cluster}` : ""
+    cluster !== 'mainnet-beta' ? `?cluster=${cluster}` : ''
   }`;
 }
 
@@ -117,7 +130,7 @@ async function getBestRoute(params: {
 
   if (routes.directPath.length === 0) {
     throw new Error(
-      "No trading routes found for this token pair. Make sure the token has liquidity pools on this network."
+      'No trading routes found for this token pair. Make sure the token has liquidity pools on this network.'
     );
   }
 
@@ -133,9 +146,13 @@ async function getBestRoute(params: {
   const isOutputToken2022 = await isToken2022(outputMint.toBase58());
   const outputProgramId = await getTokenProgramId(outputMint.toBase58());
 
-  console.log("[RAYDIUM] Token program check:", {
+  console.log('[RAYDIUM] Token program check:', {
     input: { address: inputMint.toBase58(), isToken2022: isInputToken2022 },
-    output: { address: outputMint.toBase58(), isToken2022: isOutputToken2022, programId: outputProgramId },
+    output: {
+      address: outputMint.toBase58(),
+      isToken2022: isOutputToken2022,
+      programId: outputProgramId,
+    },
   });
 
   // Create token info
@@ -168,17 +185,45 @@ async function getBestRoute(params: {
       decimals: outputDecimals,
       programId: outputProgramId,
     }),
-    chainTime: Math.floor(raydium.chainTimeData?.chainTime ?? Date.now() / 1000),
+    chainTime: Math.floor(
+      raydium.chainTimeData?.chainTime ?? Date.now() / 1000
+    ),
     slippage,
     epochInfo,
   });
 
   if (!swapRoutes || swapRoutes.length === 0) {
-    throw new Error("No valid swap routes found");
+    throw new Error('No valid swap routes found');
   }
 
-  // Best route is first (sorted by output amount)
-  return swapRoutes[0];
+  console.log('[RAYDIUM] Total routes found:', swapRoutes.length);
+  console.log(
+    '[RAYDIUM] Route types:',
+    swapRoutes.map((r) => r.routeType)
+  );
+
+  // Filter out route-type (multi-hop) swaps - only use direct swaps
+  const directSwaps = swapRoutes.filter((route) => route.routeType !== 'route');
+
+  console.log('[RAYDIUM] Direct swaps (non-multi-hop):', directSwaps.length);
+
+  if (directSwaps.length === 0) {
+    throw new Error(
+      'No direct swap routes available. Only multi-hop routes exist for this token pair. ' +
+      'Please try a different token or check liquidity.'
+    );
+  }
+
+  // Best direct route is first (sorted by output amount)
+  const bestRoute = directSwaps[0];
+  console.log('[RAYDIUM] Selected best route:');
+  console.log('[RAYDIUM]   Type:', bestRoute.routeType);
+  console.log(
+    '[RAYDIUM]   Output amount:',
+    bestRoute.amountOut.amount.toString()
+  );
+
+  return bestRoute;
 }
 
 /**
@@ -189,28 +234,52 @@ async function executeSwap(params: {
   bestRoute: any;
   isDevnet: boolean;
   hasToken2022?: boolean;
+  hasToken2022Extensions?: boolean;
 }): Promise<string> {
-  const { raydium, bestRoute, isDevnet, hasToken2022 = false } = params;
+  const {
+    raydium,
+    bestRoute,
+    isDevnet,
+    hasToken2022 = false,
+    hasToken2022Extensions = false,
+  } = params;
 
   try {
     const programIds = getPoolProgramIds(isDevnet);
 
-    console.log("[RAYDIUM] Preparing swap transaction...");
+    console.log('[RAYDIUM] Preparing swap transaction...');
 
-    // Since we're pre-creating Token2022 accounts, we can use associatedOnly
-    // But still disable checkCreateATAOwner for Token2022 to avoid conflicts
-    const ownerInfo = hasToken2022 ? {
-      associatedOnly: true,
-      checkCreateATAOwner: false,  // Don't try to create - we already did
-    } : {
-      associatedOnly: true,
-      checkCreateATAOwner: true,
-    };
+    // Pre-created Token2022 accounts, so we don't need to create them
+    // Token2022 requires associatedOnly: false due to different program ID
+    const ownerInfo = hasToken2022
+      ? {
+          associatedOnly: false, // MUST be false for Token2022
+          checkCreateATAOwner: false, // Don't try to create - we already did
+        }
+      : {
+          associatedOnly: true,
+          checkCreateATAOwner: true,
+        };
 
-    console.log("[RAYDIUM] Swap configuration:", {
+    // Token2022 with extensions needs more compute
+    const needsHigherCompute = hasToken2022Extensions;
+
+    const computeBudgetConfig = needsHigherCompute
+      ? {
+          units: 800000, // Token2022 with extensions needs more compute
+          microLamports: 200000, // Higher priority fee
+        }
+      : {
+          units: 600000, // Direct swaps without extensions
+          microLamports: 100000, // Standard priority fee
+        };
+
+    console.log('[RAYDIUM] Swap configuration:', {
       routeType: bestRoute.routeType,
       hasToken2022,
-      ownerInfo
+      hasToken2022Extensions,
+      ownerInfo,
+      computeBudget: computeBudgetConfig,
     });
 
     const { execute } = await raydium.tradeV2.swap({
@@ -218,22 +287,22 @@ async function executeSwap(params: {
       txVersion: TxVersion.V0,
       routeProgram: programIds.router,
       ownerInfo,
-      computeBudgetConfig: {
-        units: 800000,  // Increased for route swaps
-        microLamports: 200000,  // Increased priority fee
-      },
+      computeBudgetConfig,
     });
 
-    console.log("[RAYDIUM] Executing transaction...");
-    const { txIds } = await execute({ sendAndConfirm: true, sequentially: true });
-    console.log("[RAYDIUM] Transaction IDs:", txIds);
+    console.log('[RAYDIUM] Executing transaction...');
+    const { txIds } = await execute({
+      sendAndConfirm: true,
+      sequentially: true,
+    });
+    console.log('[RAYDIUM] Transaction IDs:', txIds);
     return txIds[0];
   } catch (error: any) {
-    console.error("[RAYDIUM] Execute swap error details:", error);
-    console.error("[RAYDIUM] Error type:", typeof error);
-    console.error("[RAYDIUM] Error message:", error?.message);
-    console.error("[RAYDIUM] Error stack:", error?.stack);
-    console.error("[RAYDIUM] Full error:", JSON.stringify(error, null, 2));
+    console.error('[RAYDIUM] Execute swap error details:', error);
+    console.error('[RAYDIUM] Error type:', typeof error);
+    console.error('[RAYDIUM] Error message:', error?.message);
+    console.error('[RAYDIUM] Error stack:', error?.stack);
+    console.error('[RAYDIUM] Full error:', JSON.stringify(error, null, 2));
     throw error;
   }
 }
@@ -248,11 +317,16 @@ export async function swapSolForToken(params: {
   solAmount: number;
   slippage?: number;
 }): Promise<SwapResult> {
-  const { userKeypair, tokenMint, solAmount, slippage = DEFAULT_SLIPPAGE } = params;
+  const {
+    userKeypair,
+    tokenMint,
+    solAmount,
+    slippage = DEFAULT_SLIPPAGE,
+  } = params;
 
   try {
     const raydium = await getRaydiumInstance(userKeypair);
-    const isDevnet = (process.env.SOLANA_CLUSTER || "devnet") === "devnet";
+    const isDevnet = (process.env.SOLANA_CLUSTER || 'devnet') === 'devnet';
 
     const inputMint = SOL_MINT;
     const outputMint = new PublicKey(tokenMint);
@@ -260,7 +334,7 @@ export async function swapSolForToken(params: {
 
     // Fetch actual token decimals
     const outputDecimals = await getTokenDecimals(tokenMint);
-    console.log("[RAYDIUM] Token decimals:", outputDecimals);
+    console.log('[RAYDIUM] Token decimals:', outputDecimals);
 
     // Get best route
     const bestRoute = await getBestRoute({
@@ -274,7 +348,7 @@ export async function swapSolForToken(params: {
       isDevnet,
     });
 
-    console.log("[RAYDIUM] Best route selected:", {
+    console.log('[RAYDIUM] Best route selected:', {
       type: bestRoute.routeType,
       output: bestRoute.amountOut.amount.toExact(),
       impact: bestRoute.priceImpact,
@@ -282,10 +356,23 @@ export async function swapSolForToken(params: {
 
     // Check if output token is Token2022
     const isOutputToken2022 = await isToken2022(tokenMint);
+    console.log('OUTPUT TOKEN IS OF TYPE: ', isOutputToken2022);
+    let hasToken2022 = isOutputToken2022;
+    let hasToken2022Extensions = false;
 
-    // If it's Token2022, ensure the account exists BEFORE the swap
     if (isOutputToken2022) {
-      console.log("[RAYDIUM] Pre-creating Token2022 account...");
+      console.log('[RAYDIUM] Output is Token2022, checking extensions...');
+      const extensions = await getToken2022Extensions(tokenMint);
+      hasToken2022Extensions = extensions.length > 0;
+
+      if (hasToken2022Extensions) {
+        console.log('[RAYDIUM] ⚠️ Token has extensions:', extensions);
+        console.log(
+          '[RAYDIUM] This may require additional handling or may not be fully supported'
+        );
+      }
+
+      console.log('[RAYDIUM] Pre-creating output Token2022 account...');
       await ensureTokenAccount({
         owner: userKeypair,
         tokenMint,
@@ -297,10 +384,11 @@ export async function swapSolForToken(params: {
       raydium,
       bestRoute,
       isDevnet,
-      hasToken2022: isOutputToken2022
+      hasToken2022,
+      hasToken2022Extensions,
     });
 
-    console.log("[RAYDIUM] Swap successful:", txId);
+    console.log('[RAYDIUM] Swap successful:', txId);
 
     return {
       signature: txId,
@@ -309,8 +397,8 @@ export async function swapSolForToken(params: {
       outputAmount: bestRoute.amountOut.amount.toExact(),
     };
   } catch (error: any) {
-    console.error("[RAYDIUM] Swap failed:", error.message);
-    throw new Error(`Swap failed: ${error.message || "Unknown error"}`);
+    console.error('[RAYDIUM] Swap failed:', error.message);
+    throw new Error(`Swap failed: ${error.message || 'Unknown error'}`);
   }
 }
 
@@ -324,20 +412,27 @@ export async function swapTokenForSol(params: {
   tokenAmount: number;
   slippage?: number;
 }): Promise<SwapResult> {
-  const { userKeypair, tokenMint, tokenAmount, slippage = DEFAULT_SLIPPAGE } = params;
+  const {
+    userKeypair,
+    tokenMint,
+    tokenAmount,
+    slippage = DEFAULT_SLIPPAGE,
+  } = params;
 
   try {
     const raydium = await getRaydiumInstance(userKeypair);
-    const isDevnet = (process.env.SOLANA_CLUSTER || "devnet") === "devnet";
+    const isDevnet = (process.env.SOLANA_CLUSTER || 'devnet') === 'devnet';
 
     const inputMint = new PublicKey(tokenMint);
     const outputMint = SOL_MINT;
 
     // Fetch actual token decimals
     const inputDecimals = await getTokenDecimals(tokenMint);
-    console.log("[RAYDIUM] Token decimals:", inputDecimals);
+    console.log('[RAYDIUM] Token decimals:', inputDecimals);
 
-    const inputAmount = Math.floor(tokenAmount * Math.pow(10, inputDecimals)).toString();
+    const inputAmount = Math.floor(
+      tokenAmount * Math.pow(10, inputDecimals)
+    ).toString();
 
     // Get best route
     const bestRoute = await getBestRoute({
@@ -351,7 +446,7 @@ export async function swapTokenForSol(params: {
       isDevnet,
     });
 
-    console.log("[RAYDIUM] Best route selected:", {
+    console.log('[RAYDIUM] Best route selected:', {
       type: bestRoute.routeType,
       output: bestRoute.amountOut.amount.toExact(),
       impact: bestRoute.priceImpact,
@@ -359,10 +454,19 @@ export async function swapTokenForSol(params: {
 
     // Check if input token is Token2022
     const isInputToken2022 = await isToken2022(tokenMint);
+    let hasToken2022 = isInputToken2022;
+    let hasToken2022Extensions = false;
 
-    // For Token2022 tokens, ensure the account exists
     if (isInputToken2022) {
-      console.log("[RAYDIUM] Ensuring Token2022 account exists...");
+      console.log('[RAYDIUM] Input is Token2022, checking extensions...');
+      const extensions = await getToken2022Extensions(tokenMint);
+      hasToken2022Extensions = extensions.length > 0;
+
+      if (hasToken2022Extensions) {
+        console.log('[RAYDIUM] ⚠️ Token has extensions:', extensions);
+      }
+
+      console.log('[RAYDIUM] Ensuring input Token2022 account exists...');
       await ensureTokenAccount({
         owner: userKeypair,
         tokenMint,
@@ -374,10 +478,11 @@ export async function swapTokenForSol(params: {
       raydium,
       bestRoute,
       isDevnet,
-      hasToken2022: isInputToken2022
+      hasToken2022,
+      hasToken2022Extensions,
     });
 
-    console.log("[RAYDIUM] Swap successful:", txId);
+    console.log('[RAYDIUM] Swap successful:', txId);
 
     return {
       signature: txId,
@@ -386,8 +491,8 @@ export async function swapTokenForSol(params: {
       outputAmount: bestRoute.amountOut.amount.toExact(),
     };
   } catch (error: any) {
-    console.error("[RAYDIUM] Swap failed:", error.message);
-    throw new Error(`Swap failed: ${error.message || "Unknown error"}`);
+    console.error('[RAYDIUM] Swap failed:', error.message);
+    throw new Error(`Swap failed: ${error.message || 'Unknown error'}`);
   }
 }
 
@@ -401,12 +506,13 @@ async function getBestPriceQuote(params: {
   inputDecimals: number;
   outputDecimals: number;
 }): Promise<QuoteResult> {
-  const { inputMint, outputMint, inputAmount, inputDecimals, outputDecimals } = params;
+  const { inputMint, outputMint, inputAmount, inputDecimals, outputDecimals } =
+    params;
 
   // Create temporary keypair for quote (not used for signing)
   const tempKeypair = Keypair.generate();
   const raydium = await getRaydiumInstance(tempKeypair);
-  const isDevnet = (process.env.SOLANA_CLUSTER || "devnet") === "devnet";
+  const isDevnet = (process.env.SOLANA_CLUSTER || 'devnet') === 'devnet';
 
   // Get best route
   const bestRoute = await getBestRoute({
@@ -424,7 +530,7 @@ async function getBestPriceQuote(params: {
     outputAmount: bestRoute.amountOut.amount.toExact(),
     priceImpact: (Number(bestRoute.priceImpact) * 100).toFixed(2),
     routeType: bestRoute.routeType,
-    poolIds: bestRoute.poolInfoList.map((p) => p.id).join(" → "),
+    poolIds: bestRoute.poolInfoList.map((p) => p.id).join(' → '),
   };
 }
 
@@ -464,7 +570,9 @@ export async function previewTokenForSol(params: {
 
   // Fetch actual token decimals
   const inputDecimals = await getTokenDecimals(tokenMint);
-  const inputAmount = Math.floor(tokenAmount * Math.pow(10, inputDecimals)).toString();
+  const inputAmount = Math.floor(
+    tokenAmount * Math.pow(10, inputDecimals)
+  ).toString();
 
   return getBestPriceQuote({
     inputMint,
@@ -486,10 +594,16 @@ export async function swapTokenForToken(params: {
   inputTokenAmount: number;
   slippage?: number;
 }): Promise<SwapResult> {
-  const { userKeypair, inputTokenMint, outputTokenMint, inputTokenAmount, slippage = DEFAULT_SLIPPAGE } = params;
+  const {
+    userKeypair,
+    inputTokenMint,
+    outputTokenMint,
+    inputTokenAmount,
+    slippage = DEFAULT_SLIPPAGE,
+  } = params;
 
   try {
-    console.log("[RAYDIUM] Starting token-to-token swap:", {
+    console.log('[RAYDIUM] Starting token-to-token swap:', {
       input: inputTokenMint,
       output: outputTokenMint,
       amount: inputTokenAmount,
@@ -497,7 +611,7 @@ export async function swapTokenForToken(params: {
     });
 
     const raydium = await getRaydiumInstance(userKeypair);
-    const isDevnet = (process.env.SOLANA_CLUSTER || "devnet") === "devnet";
+    const isDevnet = (process.env.SOLANA_CLUSTER || 'devnet') === 'devnet';
 
     const inputMint = new PublicKey(inputTokenMint);
     const outputMint = new PublicKey(outputTokenMint);
@@ -505,11 +619,13 @@ export async function swapTokenForToken(params: {
     // Fetch actual token decimals for both tokens
     const inputDecimals = await getTokenDecimals(inputTokenMint);
     const outputDecimals = await getTokenDecimals(outputTokenMint);
-    console.log("[RAYDIUM] Input token decimals:", inputDecimals);
-    console.log("[RAYDIUM] Output token decimals:", outputDecimals);
+    console.log('[RAYDIUM] Input token decimals:', inputDecimals);
+    console.log('[RAYDIUM] Output token decimals:', outputDecimals);
 
-    const inputAmount = Math.floor(inputTokenAmount * Math.pow(10, inputDecimals)).toString();
-    console.log("[RAYDIUM] Input amount (raw):", inputAmount);
+    const inputAmount = Math.floor(
+      inputTokenAmount * Math.pow(10, inputDecimals)
+    ).toString();
+    console.log('[RAYDIUM] Input amount (raw):', inputAmount);
 
     // Get best route
     const bestRoute = await getBestRoute({
@@ -523,7 +639,7 @@ export async function swapTokenForToken(params: {
       isDevnet,
     });
 
-    console.log("[RAYDIUM] Best route selected:", {
+    console.log('[RAYDIUM] Best route selected:', {
       type: bestRoute.routeType,
       output: bestRoute.amountOut.amount.toExact(),
       impact: bestRoute.priceImpact,
@@ -532,18 +648,38 @@ export async function swapTokenForToken(params: {
     // Check if either token is Token2022
     const isInputToken2022 = await isToken2022(inputTokenMint);
     const isOutputToken2022 = await isToken2022(outputTokenMint);
-    const hasToken2022 = isInputToken2022 || isOutputToken2022;
+    let hasToken2022 = isInputToken2022 || isOutputToken2022;
+    let hasToken2022Extensions = false;
 
-    // Ensure both token accounts exist if they're Token2022
     if (isInputToken2022) {
-      console.log("[RAYDIUM] Ensuring input Token2022 account exists...");
+      console.log('[RAYDIUM] Input is Token2022, checking extensions...');
+      const inputExtensions = await getToken2022Extensions(inputTokenMint);
+      if (inputExtensions.length > 0) {
+        hasToken2022Extensions = true;
+        console.log(
+          '[RAYDIUM] ⚠️ Input token has extensions:',
+          inputExtensions
+        );
+      }
+
+      console.log('[RAYDIUM] Ensuring input Token2022 account exists...');
       await ensureTokenAccount({
         owner: userKeypair,
         tokenMint: inputTokenMint,
       });
     }
     if (isOutputToken2022) {
-      console.log("[RAYDIUM] Ensuring output Token2022 account exists...");
+      console.log('[RAYDIUM] Output is Token2022, checking extensions...');
+      const outputExtensions = await getToken2022Extensions(outputTokenMint);
+      if (outputExtensions.length > 0) {
+        hasToken2022Extensions = true;
+        console.log(
+          '[RAYDIUM] ⚠️ Output token has extensions:',
+          outputExtensions
+        );
+      }
+
+      console.log('[RAYDIUM] Ensuring output Token2022 account exists...');
       await ensureTokenAccount({
         owner: userKeypair,
         tokenMint: outputTokenMint,
@@ -555,10 +691,11 @@ export async function swapTokenForToken(params: {
       raydium,
       bestRoute,
       isDevnet,
-      hasToken2022
+      hasToken2022,
+      hasToken2022Extensions,
     });
 
-    console.log("[RAYDIUM] Swap successful:", txId);
+    console.log('[RAYDIUM] Swap successful:', txId);
 
     return {
       signature: txId,
@@ -567,18 +704,18 @@ export async function swapTokenForToken(params: {
       outputAmount: bestRoute.amountOut.amount.toExact(),
     };
   } catch (error: any) {
-    console.error("[RAYDIUM] Token-to-token swap failed - Full error:", error);
-    console.error("[RAYDIUM] Error message:", error?.message);
-    console.error("[RAYDIUM] Error logs:", error?.logs);
-    console.error("[RAYDIUM] Error code:", error?.code);
+    console.error('[RAYDIUM] Token-to-token swap failed - Full error:', error);
+    console.error('[RAYDIUM] Error message:', error?.message);
+    console.error('[RAYDIUM] Error logs:', error?.logs);
+    console.error('[RAYDIUM] Error code:', error?.code);
 
     // Try to get more meaningful error message
-    let errorMessage = "Unknown error";
+    let errorMessage = 'Unknown error';
     if (error?.message) {
       errorMessage = error.message;
     } else if (error?.logs && Array.isArray(error.logs)) {
-      errorMessage = error.logs.join("\n");
-    } else if (typeof error === "string") {
+      errorMessage = error.logs.join('\n');
+    } else if (typeof error === 'string') {
       errorMessage = error;
     }
 
@@ -602,13 +739,26 @@ export async function previewTokenForToken(params: {
   // Fetch actual token decimals for both tokens
   const inputDecimals = await getTokenDecimals(inputTokenMint);
   const outputDecimals = await getTokenDecimals(outputTokenMint);
-  const inputAmount = Math.floor(inputTokenAmount * Math.pow(10, inputDecimals)).toString();
+  const inputAmount = Math.floor(
+    inputTokenAmount * Math.pow(10, inputDecimals)
+  ).toString();
 
-  return getBestPriceQuote({
+  console.log(`[RAYDIUM] previewTokenForToken:`);
+  console.log(`[RAYDIUM]   Input: ${inputTokenAmount} tokens (human-readable)`);
+  console.log(`[RAYDIUM]   Input decimals: ${inputDecimals}`);
+  console.log(`[RAYDIUM]   Input amount (raw units): ${inputAmount}`);
+  console.log(`[RAYDIUM]   Output decimals: ${outputDecimals}`);
+
+  const result = await getBestPriceQuote({
     inputMint,
     outputMint,
     inputAmount,
     inputDecimals,
     outputDecimals,
   });
+
+  console.log(`[RAYDIUM]   Output: ${result.outputAmount} (human-readable)`);
+  console.log(`[RAYDIUM]   Route type: ${result.routeType}`);
+
+  return result;
 }

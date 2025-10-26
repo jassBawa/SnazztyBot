@@ -10,6 +10,8 @@ export async function createDcaStrategy(params: CreateStrategyParams) {
       amountPerInterval: params.amountPerInterval,
       frequency: params.frequency,
       nextExecutionTime: params.nextExecutionTime,
+      baseTokenDecimals: params.baseTokenDecimals,
+      targetTokenDecimals: params.targetTokenDecimals,
       status: 'ACTIVE',
     },
   });
@@ -19,6 +21,23 @@ export async function getUserDcaStrategies(userId: number) {
   return prisma.dcaStrategy.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
+  });
+}
+
+export async function getExistingStrategyForTokenPair(
+  userId: number,
+  baseToken: string,
+  targetToken: string
+) {
+  return prisma.dcaStrategy.findFirst({
+    where: {
+      userId,
+      baseToken,
+      targetToken,
+      status: {
+        in: ['ACTIVE', 'PAUSED'],
+      },
+    },
   });
 }
 
@@ -72,14 +91,14 @@ export async function updateDcaStrategyAfterExecution(params: UpdateStrategyAfte
     throw new Error('Strategy not found');
   }
 
-  const newTotalInvested = Number(strategy.totalInvested) + Number(params.amountInvested);
+  const newTotalInvested = strategy.totalInvested + params.amountInvested;
   const newExecutionCount = strategy.executionCount + 1;
 
   return prisma.dcaStrategy.update({
     where: { id: params.strategyId },
     data: {
       nextExecutionTime: params.nextExecutionTime,
-      totalInvested: newTotalInvested.toString(),
+      totalInvested: newTotalInvested,
       executionCount: newExecutionCount,
       consecutiveFailures: 0,
     },

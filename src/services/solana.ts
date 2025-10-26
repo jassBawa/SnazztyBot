@@ -148,14 +148,42 @@ export async function isToken2022(tokenMint: string): Promise<boolean> {
     const accountInfo = await connection.getAccountInfo(mintPubkey);
 
     if (!accountInfo) {
+      console.log(`[SOLANA] No account info found for ${tokenMint} - treating as regular token`);
       return false;
     }
 
-    // Check if the owner program is Token-2022
-    return accountInfo.owner.equals(TOKEN_2022_PROGRAM_ID);
+    const isToken2022 = accountInfo.owner.equals(TOKEN_2022_PROGRAM_ID);
+    console.log(`[SOLANA] Token ${tokenMint} program: ${accountInfo.owner.toBase58()} (Token2022: ${isToken2022})`);
+
+    return isToken2022;
   } catch (error) {
     console.error("[SOLANA] Error checking Token-2022:", error);
     return false; // Default to regular SPL token
+  }
+}
+
+/**
+ * Get Token2022 extensions if any
+ */
+export async function getToken2022Extensions(tokenMint: string): Promise<string[]> {
+  try {
+    const connection = getConnection();
+    const mintPubkey = new PublicKey(tokenMint);
+
+    const mintInfo = await connection.getParsedAccountInfo(mintPubkey);
+
+    if (!mintInfo.value?.data || !('parsed' in mintInfo.value.data)) {
+      return [];
+    }
+
+    const extensions = mintInfo.value.data.parsed?.info?.extensions || [];
+    const extensionTypes = extensions.map((ext: any) => ext.extension || ext.type || 'unknown');
+
+    console.log(`[SOLANA] Token2022 extensions for ${tokenMint}:`, extensionTypes);
+    return extensionTypes;
+  } catch (error) {
+    console.error("[SOLANA] Error getting Token2022 extensions:", error);
+    return [];
   }
 }
 
@@ -316,9 +344,7 @@ function decimalToU64(amount: string, decimals: number): bigint {
 }
 
 function getExplorerBase(): string {
-  const cluster = (process.env.SOLANA_CLUSTER || "devnet").toLowerCase();
-  const qs = cluster === "mainnet-beta" || cluster === "mainnet" ? "" : `?cluster=${cluster}`;
-  return `https://explorer.solana.com/tx/`; // append sig + qs at callsite
+  return `https://explorer.solana.com/tx/`; // Base URL, cluster query string added at callsite
 }
 
 // Reverse mapping for symbol to mint address
