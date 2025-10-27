@@ -7,8 +7,13 @@ import {
 } from "bot/utils/tokenCreationSession";
 import { Telegraf, Markup } from "telegraf";
 import { tokenOptionsKeyboard } from "utils/keyboards";
+import { createToken } from "@repo/services/token";
+import { Connection } from "@solana/web3.js";
+import { getOrCreateUserKeypair } from "@repo/services/solana";
+import { getTelegramId } from "utils/telegram";
 
 export const registerTokenCommands = async (bot: Telegraf) => {
+  const connection = new Connection(process.env.SOLANA_RPC_URL!);
   bot.action("ACTION_TOKEN_LAUNCHPAD", async (ctx) => {
     await ctx.answerCbQuery();
 
@@ -185,25 +190,40 @@ export const registerTokenCommands = async (bot: Telegraf) => {
     await ctx.reply("⏳ Creating your token... This may take a few seconds.");
 
     try {
-      // TODO: Call your smart contract here
-      // const result = await createTokenOnChain(session.name, session.symbol, session.uri);
+      const { name, uri, symbol } = session;
+      const telegramId = getTelegramId(ctx);
+      const payerKeypair = await getOrCreateUserKeypair(telegramId);
 
-      // For now, simulate success
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const result = await createToken({
+        name,
+        symbol,
+        uri,
+        connection,
+        payerKeypair,
+      });
 
-      await ctx.reply(
-        "🎉 *Token Created Successfully!*\n\n" +
-          `• *Name:* ${session.name}\n` +
-          `• *Symbol:* ${session.symbol}\n` +
-          `• *Mint Address:* \`ExampleMint123...\`\n\n` +
-          "Your token is now live on Solana! 🚀",
-        {
-          parse_mode: "Markdown",
-          ...Markup.inlineKeyboard([
+      if (result.success) {
+        await ctx.reply(
+          "🎉 *Token Created Successfully!*\n\n" +
+            `• *Name:* ${session.name}\n` +
+            `• *Symbol:* ${session.symbol}\n` +
+            `• *Mint Address:* \`${result.tokenMintKeypair?.publicKey}...\`\n\n` +
+            "Your token is now live on Solana! 🚀",
+          {
+            parse_mode: "Markdown",
+            ...Markup.inlineKeyboard([
+              [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
+            ]),
+          }
+        );
+      } else {
+        await ctx.reply(
+          "❌ Failed to create token. Please try again later.",
+          Markup.inlineKeyboard([
             [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
-          ]),
-        }
-      );
+          ])
+        );
+      }
 
       deleteSession(userId);
     } catch (error) {
@@ -273,7 +293,12 @@ export const registerTokenCommands = async (bot: Telegraf) => {
     // For now, simulate with mock data
     const availableTokens: any[] = [
       // Remove this array to test empty state
-      { id: "token1", name: "Snazzy Token", symbol: "SNAZ", mintAddress: "7xKXt...abc" },
+      {
+        id: "token1",
+        name: "Snazzy Token",
+        symbol: "SNAZ",
+        mintAddress: "7xKXt...abc",
+      },
       // { id: "token2", name: "Cool Token", symbol: "COOL", mintAddress: "9yZWr...xyz" },
     ];
 
