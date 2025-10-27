@@ -9,6 +9,7 @@ import { registerQuickCommands } from "./quick";
 import { registerDcaCommands } from "./dca";
 import { registerPriceCommand } from "./price";
 import { registerPortfolio } from "./portfolio";
+import { registerTokenCommands } from "./token";
 
 export function registerCommands(bot: Telegraf) {
   registerStart(bot);
@@ -21,6 +22,5 @@ export function registerCommands(bot: Telegraf) {
   registerDcaCommands(bot);
   registerPriceCommand(bot);
   registerPortfolio(bot);
+  registerTokenCommands(bot);
 }
-
-

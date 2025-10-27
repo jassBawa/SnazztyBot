@@ -19,7 +19,11 @@ export const mainMenuKeyboard = () => {
       Markup.button.callback("📊 Setup DCA", "ACTION_DCA_SETUP"),
       Markup.button.callback("📋 My DCA", "ACTION_DCA_LIST"),
     ],
-    [Markup.button.callback("📤 Send Tokens", "ACTION_WALLET_SEND")],
+    [
+      Markup.button.callback("📤 Send Tokens", "ACTION_WALLET_SEND"),
+      Markup.button.callback("🍌 Token Launchpad", "ACTION_TOKEN_LAUNCHPAD"),
+    ],
+
     [Markup.button.callback("ℹ️ About", "ACTION_ABOUT")],
   ]);
 };
@@ -62,6 +66,15 @@ export const swapOptionsKeyboard = () => {
       Markup.button.callback("🔴 Sell Token", "ACTION_SWAP_SELL"),
     ],
     [Markup.button.callback("🔄 Swap Tokens", "ACTION_SWAP_TOKEN_TO_TOKEN")],
+    [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
+  ]);
+};
+
+export const tokenOptionsKeyboard = () => {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("✨ Create Token", "ACTION_TOKEN_CREATE")],
+    [Markup.button.callback("📋 My Tokens", "ACTION_MY_TOKEN_LIST")],
+    [Markup.button.callback("📋 Available Tokens", "ACTION_TOKEN_LIST")],
     [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
   ]);
 };
