@@ -4,17 +4,24 @@ import {
   Program,
   Wallet,
 } from "@coral-xyz/anchor";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  getAssociatedTokenAddress,
+  getOrCreateAssociatedTokenAccount,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 import {
   Connection,
   Keypair,
   PublicKey,
   SystemProgram,
   SYSVAR_RENT_PUBKEY,
+  Transaction,
 } from "@solana/web3.js";
 import idl from "./idl/program.json";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
+import { BN } from "bn.js";
 
 interface UserToken {
   bondingCurve: string;
@@ -44,6 +51,8 @@ interface CreateToken {
 const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
   "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
 );
+const treasury = new PublicKey("8UoRQ1rBqwgf19vBadmG842k4t6TuqmgcVkEp5S28Rm2");
+const WSOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 
 export const createToken = async ({
   name,
@@ -61,8 +70,6 @@ export const createToken = async ({
     );
     const tokenMintKeypair = Keypair.generate();
 
-    const bondingCurveTokenAccountKeypair = Keypair.generate();
-
     const [bondingCurve] = PublicKey.findProgramAddressSync(
       [
         Buffer.from("bonding-curve"),
@@ -72,9 +79,12 @@ export const createToken = async ({
       programId
     );
 
-    const treasury = new PublicKey(
-      "8UoRQ1rBqwgf19vBadmG842k4t6TuqmgcVkEp5S28Rm2"
+    const bondingCurveTokenAccount = await getAssociatedTokenAddress(
+      tokenMintKeypair.publicKey,
+      bondingCurve,
+      true
     );
+
     const [metadataAccount] = PublicKey.findProgramAddressSync(
       [
         Buffer.from("metadata"),
@@ -94,14 +104,15 @@ export const createToken = async ({
         treasury,
         bondingCurve,
         tokenMint: tokenMintKeypair.publicKey,
-        bondingCurveTokenAccount: bondingCurveTokenAccountKeypair.publicKey,
+        bondingCurveTokenAccount,
         metadataAccount,
         tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: SYSVAR_RENT_PUBKEY,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       })
-      .signers([tokenMintKeypair, bondingCurveTokenAccountKeypair])
+      .signers([tokenMintKeypair])
       .rpc();
 
     return {
@@ -407,5 +418,117 @@ export const getTokenHolders = async (
   } catch (error) {
     console.error("Error fetching token holders:", error);
     return 0;
+  }
+};
+
+interface BuyTokensParams {
+  connection: Connection;
+  programId: PublicKey;
+  buyerKeypair: Keypair;
+  tokenMint: PublicKey;
+  amount: number;
+  creator: PublicKey;
+}
+
+export const buyTokens = async ({
+  connection,
+  programId,
+  buyerKeypair,
+  tokenMint,
+  amount,
+  creator,
+}: BuyTokensParams) => {
+  try {
+    const wallet = new Wallet(buyerKeypair);
+    const provider = new AnchorProvider(connection, wallet);
+    const program = new Program(idl, provider);
+
+    const solAmount = new BN(amount).mul(new BN(1e9));
+
+    const [globalConfig] = PublicKey.findProgramAddressSync(
+      [Buffer.from("global-config")],
+      programId
+    );
+
+    const [bondingCurve] = PublicKey.findProgramAddressSync(
+      [Buffer.from("bonding-curve"), tokenMint.toBuffer(), creator.toBuffer()],
+      programId
+    );
+
+    const bondingCurveTokenAccount = await getAssociatedTokenAddress(
+      tokenMint,
+      bondingCurve,
+      true
+    );
+
+    const buyerTokenAccount = await getAssociatedTokenAddress(
+      tokenMint,
+      buyerKeypair.publicKey
+    );
+
+    const wsolTempTokenAccountInfo = await getOrCreateAssociatedTokenAccount(
+      connection,
+      buyerKeypair,
+      WSOL_MINT,
+      bondingCurve,
+      true
+    );
+    const wsolTempTokenAccount = wsolTempTokenAccountInfo.address;
+
+    const liquidityTokenAccountInfo = await getOrCreateAssociatedTokenAccount(
+      connection,
+      buyerKeypair,
+      tokenMint,
+      bondingCurve,
+      true
+    );
+
+    const liquidityTokenAccount = liquidityTokenAccountInfo.address;
+
+    const tx = new Transaction();
+
+    tx.add(
+      SystemProgram.transfer({
+        fromPubkey: buyerKeypair.publicKey,
+        toPubkey: bondingCurve,
+        lamports: solAmount.toNumber(),
+      })
+    );
+
+    const programIx = await program.methods
+      .buyTokens(solAmount)
+      .accounts({
+        buyer: buyerKeypair.publicKey,
+        globalConfig,
+        treasury,
+        tokenMint,
+        bondingCurve,
+        bondingCurveTokenAccount,
+        buyerTokenAccount,
+        wsolTempTokenAccount,
+        liquidityTokenAccount,
+        wsolMintAccount: WSOL_MINT,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .instruction();
+
+    tx.add(programIx);
+
+    const signature = await provider.sendAndConfirm(tx);
+
+    return {
+      success: true,
+      signature,
+    };
+  } catch (error) {
+    console.error("Error buying tokens:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+      signature: null,
+    };
   }
 };

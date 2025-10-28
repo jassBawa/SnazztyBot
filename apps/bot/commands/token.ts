@@ -8,6 +8,7 @@ import {
 import { Telegraf, Markup } from "telegraf";
 import { tokenOptionsKeyboard } from "utils/keyboards";
 import {
+  buyTokens,
   calculateTokenPrice,
   createToken,
   formatPrice,
@@ -416,26 +417,246 @@ ${token.graduated ? "🎓 *Status:* Graduated" : "📈 *Status:* Active"}
   });
 
   // Action: Buy token
+  // Handle Buy button click
   bot.action(/TOKEN_BUY:(.+)/, async (ctx) => {
     await ctx.answerCbQuery();
 
-    const mintAddress = ctx.match[1];
+    const tokenMint = ctx.match[1];
 
-    await ctx.reply(
-      "🟢 *Buy Token*\n\n" +
-        `Token: \`${mintAddress}\`\n\n` +
-        "How much SOL do you want to spend?\n" +
-        "_(Type the amount, e.g., 0.1)_",
-      {
+    try {
+      const programId = new PublicKey(process.env.PROGRAM_ID!);
+
+      // Fetch token info
+      const availableTokens = await getAvailableTokens({
+        connection,
+        programId,
+      });
+      const token = availableTokens.find((t) => t.tokenMint === tokenMint);
+
+      if (!token) {
+        await ctx.reply("❌ Token not found.");
+        return;
+      }
+
+      // Calculate price for different amounts
+      const priceFor1K = token.currentPrice * 1_000;
+      const priceFor10K = token.currentPrice * 10_000;
+      const priceFor100K = token.currentPrice * 100_000;
+      const priceFor1M = token.currentPrice * 1_000_000;
+
+      const message = `
+💵 *Buy ${token.name} (${token.symbol})*
+
+💰 *Current Prices:*
+- 1,000 tokens: ${formatPrice(priceFor1K)}
+- 10,000 tokens: ${formatPrice(priceFor10K)}
+- 100,000 tokens: ${formatPrice(priceFor100K)}
+- 1,000,000 tokens: ${formatPrice(priceFor1M)}
+
+How much SOL do you want to spend?
+    `.trim();
+
+      await ctx.reply(message, {
         parse_mode: "Markdown",
         ...Markup.inlineKeyboard([
-          [Markup.button.callback("❌ Cancel", "ACTION_TOKEN_AVAILABLE")],
+          [
+            Markup.button.callback("0.01 SOL", `BUY_AMOUNT:${tokenMint}:0.01`),
+            Markup.button.callback("0.05 SOL", `BUY_AMOUNT:${tokenMint}:0.05`),
+          ],
+          [
+            Markup.button.callback("0.1 SOL", `BUY_AMOUNT:${tokenMint}:0.1`),
+            Markup.button.callback("0.5 SOL", `BUY_AMOUNT:${tokenMint}:0.5`),
+          ],
+          [
+            Markup.button.callback("1 SOL", `BUY_AMOUNT:${tokenMint}:1`),
+            Markup.button.callback("Custom", `BUY_CUSTOM:${tokenMint}`),
+          ],
+          [Markup.button.callback("🔙 Back", `TOKEN_DETAILS:${tokenMint}`)],
         ]),
+      });
+    } catch (error) {
+      console.error("Error loading buy screen:", error);
+      await ctx.reply("❌ Error loading buy options.");
+    }
+  });
+
+  // Handle amount selection
+  bot.action(/BUY_AMOUNT:(.+):(.+)/, async (ctx) => {
+    await ctx.answerCbQuery();
+
+    const tokenMint = ctx.match[1];
+    const solAmount = parseFloat(ctx.match[2]);
+
+    try {
+      const telegramId = getTelegramId(ctx);
+      const buyerKeypair = await getOrCreateUserKeypair(telegramId);
+      const programId = new PublicKey(process.env.PROGRAM_ID!);
+
+      // Fetch token info
+      const availableTokens = await getAvailableTokens({
+        connection,
+        programId,
+      });
+      const token = availableTokens.find((t) => t.tokenMint === tokenMint);
+
+      if (!token) {
+        await ctx.reply("❌ Token not found.");
+        return;
+      }
+
+      // Check balance
+      const balance = await connection.getBalance(buyerKeypair.publicKey);
+      const balanceSOL = balance / 1e9;
+
+      if (balanceSOL < solAmount) {
+        await ctx.reply(
+          `❌ Insufficient balance!\n\n` +
+            `You have: ${balanceSOL.toFixed(4)} SOL\n` +
+            `Need: ${solAmount} SOL\n\n` +
+            `Use /topup to add more funds.`
+        );
+        return;
+      }
+
+      // Show confirmation
+      const estimatedTokens = solAmount / token.currentPrice;
+      const message = `
+🔍 *Confirm Purchase*
+
+*Token:* ${token.name} (${token.symbol})
+*Amount:* ${solAmount} SOL
+*Estimated tokens:* ~${estimatedTokens.toLocaleString()} ${token.symbol}
+
+*Your balance:* ${balanceSOL.toFixed(4)} SOL
+
+Proceed with purchase?
+    `.trim();
+
+      await ctx.reply(message, {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              "✅ Confirm",
+              `BUY_CONFIRM:${tokenMint}:${solAmount}`
+            ),
+            Markup.button.callback("❌ Cancel", `TOKEN_BUY:${tokenMint}`),
+          ],
+        ]),
+      });
+    } catch (error) {
+      console.error("Error preparing purchase:", error);
+      await ctx.reply("❌ Error preparing purchase.");
+    }
+  });
+
+  // Handle purchase confirmation
+  bot.action(/BUY_CONFIRM:(.+):(.+)/, async (ctx) => {
+    await ctx.answerCbQuery();
+
+    const tokenMint = ctx.match[1];
+    const solAmount = parseFloat(ctx.match[2]);
+
+    try {
+      const telegramId = getTelegramId(ctx);
+      const buyerKeypair = await getOrCreateUserKeypair(telegramId);
+      const programId = new PublicKey(process.env.PROGRAM_ID!);
+
+      // Fetch token info
+      const availableTokens = await getAvailableTokens({
+        connection,
+        programId,
+      });
+      const token = availableTokens.find((t) => t.tokenMint === tokenMint);
+
+      if (!token) {
+        await ctx.reply("❌ Token not found.");
+        return;
+      }
+
+      await ctx.reply(
+        "⏳ Processing your purchase...\nThis may take a few seconds."
+      );
+
+      // Execute the buy
+      const result = await buyTokens({
+        connection,
+        programId,
+        buyerKeypair,
+        tokenMint: new PublicKey(tokenMint),
+        amount: solAmount,
+        creator: new PublicKey(token.creator),
+      });
+
+      if (result.success) {
+        await ctx.reply(
+          `✅ *Purchase Successful!*\n\n` +
+            `You bought ${token.symbol} tokens with ${solAmount} SOL\n\n` +
+            `Transaction: \`${result.signature}\`\n\n` +
+            `View on Solscan: https://solscan.io/tx/${result.signature}?cluster=devnet`,
+          {
+            parse_mode: "Markdown",
+            ...Markup.inlineKeyboard([
+              [Markup.button.callback("📋 My Tokens", "ACTION_MY_TOKEN_LIST")],
+              [
+                Markup.button.callback(
+                  "🔙 Back to Token",
+                  `TOKEN_DETAILS:${tokenMint}`
+                ),
+              ],
+              [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
+            ]),
+          }
+        );
+      } else {
+        await ctx.reply(
+          `❌ *Purchase Failed*\n\n` +
+            `Error: ${result.error}\n\n` +
+            `Please try again or contact support.`,
+          {
+            parse_mode: "Markdown",
+            ...Markup.inlineKeyboard([
+              [
+                Markup.button.callback(
+                  "🔄 Try Again",
+                  `TOKEN_BUY:${tokenMint}`
+                ),
+              ],
+              [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
+            ]),
+          }
+        );
+      }
+    } catch (error) {
+      console.error("Error executing purchase:", error);
+      await ctx.reply(
+        "❌ An unexpected error occurred. Please try again later.",
+        {
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
+          ]),
+        }
+      );
+    }
+  });
+
+  // Handle custom amount (optional)
+  bot.action(/BUY_CUSTOM:(.+)/, async (ctx) => {
+    await ctx.answerCbQuery();
+
+    const tokenMint = ctx.match[1];
+
+    await ctx.reply(
+      "Please enter the amount of SOL you want to spend:\n\n" + "Example: 0.25",
+      {
+        reply_markup: {
+          force_reply: true,
+        },
       }
     );
 
-    // TODO: Create session to track buy flow
-    // createBuySession(ctx.from.id, mintAddress);
+    // Store the token mint in a temporary state (you'll need to implement state management)
+    // For now, this is a placeholder - you'd need to track this in your database or session
   });
 
   // Action: Sell token
