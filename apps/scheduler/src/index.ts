@@ -1,6 +1,8 @@
-import 'dotenv/config';
 import cron from 'node-cron';
 import { executeDcaStrategies } from './executor.js';
+import {config} from "dotenv";
+
+config()
 
 const dcaCronJob = cron.schedule('* * * * *', async () => {
   await executeDcaStrategies();
