@@ -25,6 +25,9 @@
   },
   "name": "with-prisma",
   "dependencies": {
+    "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
+    "@noble/hashes": "^2.0.1",
+    "bs58": "^6.0.0"
   },
   "packageManager": "pnpm@10.10.0"
 }

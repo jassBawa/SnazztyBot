@@ -7,13 +7,14 @@ import {
 } from "bot/utils/tokenCreationSession";
 import { Telegraf, Markup } from "telegraf";
 import { tokenOptionsKeyboard } from "utils/keyboards";
-import { createToken } from "@repo/services/token";
-import { Connection } from "@solana/web3.js";
+import { createToken, getMyTokens } from "@repo/services/token";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { getOrCreateUserKeypair } from "@repo/services/solana";
 import { getTelegramId } from "utils/telegram";
 
 export const registerTokenCommands = async (bot: Telegraf) => {
   const connection = new Connection(process.env.SOLANA_RPC_URL!);
+  const programId = new PublicKey(process.env.PROGRAM_ID!);
   bot.action("ACTION_TOKEN_LAUNCHPAD", async (ctx) => {
     await ctx.answerCbQuery();
 
@@ -200,6 +201,7 @@ export const registerTokenCommands = async (bot: Telegraf) => {
         uri,
         connection,
         payerKeypair,
+        programId,
       });
 
       if (result.success) {
@@ -242,13 +244,14 @@ export const registerTokenCommands = async (bot: Telegraf) => {
   bot.action("ACTION_MY_TOKEN_LIST", async (ctx) => {
     await ctx.answerCbQuery();
 
-    const userId = ctx.from.id;
+    const telegramId = getTelegramId(ctx);
+    const payerKeypair = await getOrCreateUserKeypair(telegramId);
 
-    // TODO: Fetch user's tokens from database
-    // const userTokens = await db.token.findMany({ where: { userId } });
-
-    // For now, simulate empty list
-    const userTokens: any[] = [];
+    const userTokens = await getMyTokens({
+      connection,
+      programId,
+      creatorPubkey: payerKeypair.publicKey,
+    });
 
     if (userTokens.length === 0) {
       await ctx.reply(
@@ -264,13 +267,11 @@ export const registerTokenCommands = async (bot: Telegraf) => {
         }
       );
     } else {
-      // Build token list message
       let message = "📋 *My Tokens*\n\n";
 
       userTokens.forEach((token, index) => {
         message += `${index + 1}. *${token.name}* (${token.symbol})\n`;
-        message += `   • Mint: \`${token.mintAddress}\`\n`;
-        message += `   • Created: ${new Date(token.createdAt).toLocaleDateString()}\n\n`;
+        message += `   • Mint: \`${token.tokenMint}\`\n`;
       });
 
       await ctx.reply(message, {
