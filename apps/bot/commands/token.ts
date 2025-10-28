@@ -7,7 +7,13 @@ import {
 } from "bot/utils/tokenCreationSession";
 import { Telegraf, Markup } from "telegraf";
 import { tokenOptionsKeyboard } from "utils/keyboards";
-import { createToken, getMyTokens } from "@repo/services/token";
+import {
+  calculateTokenPrice,
+  createToken,
+  formatPrice,
+  getAvailableTokens,
+  getMyTokens,
+} from "@repo/services/token";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getOrCreateUserKeypair } from "@repo/services/solana";
 import { getTelegramId } from "utils/telegram";
@@ -288,54 +294,69 @@ export const registerTokenCommands = async (bot: Telegraf) => {
   bot.action("ACTION_TOKEN_LIST", async (ctx) => {
     await ctx.answerCbQuery();
 
-    // TODO: Fetch tokens from bonding curve contract
-    // const availableTokens = await fetchBondingCurveTokens();
+    try {
+      const programId = new PublicKey(process.env.PROGRAM_ID!);
+      const availableTokens = await getAvailableTokens({
+        connection,
+        programId,
+      });
 
-    // For now, simulate with mock data
-    const availableTokens: any[] = [
-      // Remove this array to test empty state
-      {
-        id: "token1",
-        name: "Snazzy Token",
-        symbol: "SNAZ",
-        mintAddress: "7xKXt...abc",
-      },
-      // { id: "token2", name: "Cool Token", symbol: "COOL", mintAddress: "9yZWr...xyz" },
-    ];
+      if (availableTokens.length === 0) {
+        await ctx.reply(
+          "🪙 *Available Tokens*\n\n" +
+            "No tokens available on the bonding curve yet.\n\n" +
+            "Be the first to create one! 🚀",
+          {
+            parse_mode: "Markdown",
+            ...Markup.inlineKeyboard([
+              [
+                Markup.button.callback(
+                  "✨ Create Token",
+                  "ACTION_TOKEN_CREATE"
+                ),
+              ],
+              [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
+            ]),
+          }
+        );
+      } else {
+        // Build message with token details
+        let message = "🪙 *Available Tokens*\n\n";
+        message += `Found ${availableTokens.length} token${availableTokens.length > 1 ? "s" : ""}:\n\n`;
 
-    if (availableTokens.length === 0) {
-      await ctx.reply(
-        "🪙 *Available Tokens*\n\n" +
-          "No tokens available on the bonding curve yet.\n\n" +
-          "Be the first to create one! 🚀",
-        {
-          parse_mode: "Markdown",
-          ...Markup.inlineKeyboard([
-            [Markup.button.callback("✨ Create Token", "ACTION_TOKEN_CREATE")],
-            [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
-          ]),
-        }
-      );
-    } else {
-      // Build inline keyboard with token buttons
-      const tokenButtons = availableTokens.map((token) => [
-        Markup.button.callback(
-          `${token.name} (${token.symbol})`,
-          `TOKEN_DETAILS:${token.mintAddress}`
-        ),
-      ]);
+        // Build inline keyboard with token buttons
+        const tokenButtons = availableTokens.map((token) => {
+          const priceFor1M = calculateTokenPrice(
+            token.virtualSolReserves,
+            token.virtualTokenReserves,
+            1_000_000
+          );
+          const priceFormatted = formatPrice(priceFor1M, 1_000_000);
 
-      await ctx.reply(
-        "🪙 *Available Tokens*\n\n" +
-          "Select a token to view details and trade:",
-        {
+          return [
+            Markup.button.callback(
+              `${token.symbol} - ${priceFormatted}`,
+              `TOKEN_DETAILS:${token.tokenMint}`
+            ),
+          ];
+        });
+
+        await ctx.reply(message, {
           parse_mode: "Markdown",
           ...Markup.inlineKeyboard([
             ...tokenButtons,
             [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
           ]),
-        }
-      );
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching available tokens:", error);
+      await ctx.reply("❌ Error fetching tokens. Please try again.", {
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("🔄 Retry", "ACTION_TOKEN_LIST")],
+          [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
+        ]),
+      });
     }
   });
 
@@ -343,51 +364,55 @@ export const registerTokenCommands = async (bot: Telegraf) => {
   bot.action(/TOKEN_DETAILS:(.+)/, async (ctx) => {
     await ctx.answerCbQuery();
 
-    const mintAddress = ctx.match[1];
+    const tokenMint = ctx.match[1];
 
-    // TODO: Fetch token details from bonding curve
-    // const tokenDetails = await getTokenDetails(mintAddress);
+    try {
+      const programId = new PublicKey(process.env.PROGRAM_ID!);
+      const availableTokens = await getAvailableTokens({
+        connection,
+        programId,
+      });
 
-    // Mock data for now
-    const tokenDetails = {
-      name: "Snazzy Token",
-      symbol: "SNAZ",
-      mintAddress: mintAddress,
-      description: "The snazziest token on Solana!",
-      totalSupply: "1,000,000",
-      currentPrice: "0.00042 SOL",
-      marketCap: "420 SOL",
-      holders: 156,
-      bondingCurveProgress: "45%",
-      imageUrl: "https://example.com/logo.png",
-    };
+      const token = availableTokens.find((t) => t.tokenMint === tokenMint);
 
-    await ctx.reply(
-      `🪙 *${tokenDetails.name}* (${tokenDetails.symbol})\n\n` +
-        `📝 ${tokenDetails.description}\n\n` +
-        `💰 *Price:* ${tokenDetails.currentPrice}\n` +
-        `📊 *Market Cap:* ${tokenDetails.marketCap}\n` +
-        `👥 *Holders:* ${tokenDetails.holders}\n` +
-        `📈 *Bonding Curve:* ${tokenDetails.bondingCurveProgress}\n` +
-        `🔗 *Mint:* \`${tokenDetails.mintAddress}\`\n\n` +
-        `What would you like to do?`,
-      {
+      if (!token) {
+        await ctx.reply("❌ Token not found.");
+        return;
+      }
+
+      const priceFor1M = formatPrice(token.currentPrice * 1_000_000, 1_000_000);
+
+      const message = `
+🪙 *${token.name}* (${token.symbol})
+
+💰 *Current Price:*
+- ${priceFor1M}
+
+📊 *Market Stats:*
+- Market Cap: ${token.realSolReserves.toFixed(4)} SOL
+- Holders: ${token.holders.toLocaleString()}
+
+📍 *Mint Address:*
+\`${token.tokenMint}\`
+
+${token.graduated ? "🎓 *Status:* Graduated" : "📈 *Status:* Active"}
+    `.trim();
+
+      await ctx.reply(message, {
         parse_mode: "Markdown",
         ...Markup.inlineKeyboard([
           [
-            Markup.button.callback("🟢 Buy", `TOKEN_BUY:${mintAddress}`),
-            Markup.button.callback("🔴 Sell", `TOKEN_SELL:${mintAddress}`),
+            Markup.button.callback("💵 Buy", `TOKEN_BUY:${tokenMint}`),
+            Markup.button.callback("💸 Sell", `TOKEN_SELL:${tokenMint}`),
           ],
-          [
-            Markup.button.callback(
-              "🔙 Back to Tokens",
-              "ACTION_TOKEN_AVAILABLE"
-            ),
-          ],
+          [Markup.button.callback("🔙 Back to Tokens", "ACTION_TOKEN_LIST")],
           [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
         ]),
-      }
-    );
+      });
+    } catch (error) {
+      console.error("Error fetching token details:", error);
+      await ctx.reply("❌ Error fetching token details.");
+    }
   });
 
   // Action: Buy token

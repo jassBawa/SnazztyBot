@@ -29,6 +29,8 @@ interface UserToken {
   symbol?: string;
   graduated: boolean;
   bump: number;
+  currentPrice: number;
+  holders: number;
 }
 
 interface CreateToken {
@@ -154,23 +156,37 @@ export const getMyTokens = async ({
     for (const { pubkey, account } of accounts) {
       const decoded = coder.decode("BondingCurve", account.data);
 
-      const metadata = await getTokenMetadata(connection, decoded.token_mint);
+      const tokenMint = new PublicKey(decoded.token_mint.toString());
+
+      const tokenMetadata = await getTokenMetadata(connection, tokenMint);
+
+      const virtualSolReserves = decoded.virtual_sol_reserves.toNumber() / 1e9;
+      const virtualTokenReserves =
+        decoded.virtual_token_reserves.toNumber() / Math.pow(10, 6);
+
+      const currentPrice = calculateTokenPrice(
+        virtualSolReserves,
+        virtualTokenReserves
+      );
+
+      const holders = await getTokenHolders(connection, tokenMint, pubkey);
 
       decodedTokens.push({
         bondingCurve: pubkey.toString(),
         tokenMint: decoded.token_mint.toString(),
-        name: metadata?.name || "Unknown Token",
-        symbol: metadata?.symbol || "???",
-        uri: metadata?.uri,
+        name: tokenMetadata?.name || "Unknown Token",
+        symbol: tokenMetadata?.symbol || "???",
+        uri: tokenMetadata?.uri,
         creator: decoded.creator.toString(),
-        virtualSolReserves: decoded.virtual_sol_reserves.toNumber() / 1e9,
-        virtualTokenReserves:
-          decoded.virtual_token_reserves.toNumber() / Math.pow(10, 6),
+        virtualSolReserves,
+        virtualTokenReserves,
+        currentPrice,
         realSolReserves: decoded.real_sol_reserves.toNumber() / 1e9,
         realTokenReserves:
           decoded.real_token_reserves.toNumber() / Math.pow(10, 6),
         graduated: !decoded.graduated.Active,
         bump: decoded.bump,
+        holders,
       });
     }
 
@@ -178,6 +194,75 @@ export const getMyTokens = async ({
     return decodedTokens;
   } catch (error) {
     console.error("Error while fetching my tokens:", error);
+    return [];
+  }
+};
+
+export const getAvailableTokens = async ({
+  connection,
+  programId,
+}: {
+  connection: Connection;
+  programId: PublicKey;
+}) => {
+  try {
+    const coder = new BorshAccountsCoder(idl as any);
+    const discriminator = getAccountDiscriminator("BondingCurve");
+    const discriminatorBase = bs58.encode(discriminator);
+
+    const accounts = await connection.getProgramAccounts(programId, {
+      filters: [
+        {
+          memcmp: {
+            offset: 0,
+            bytes: discriminatorBase,
+          },
+        },
+      ],
+    });
+
+    const decodedTokens: UserToken[] = [];
+
+    for (const { account, pubkey } of accounts) {
+      const decoded = coder.decode("BondingCurve", account.data);
+
+      const tokenMint = new PublicKey(decoded.token_mint.toString());
+
+      const tokenMetadata = await getTokenMetadata(connection, tokenMint);
+
+      const virtualSolReserves = decoded.virtual_sol_reserves.toNumber() / 1e9;
+      const virtualTokenReserves =
+        decoded.virtual_token_reserves.toNumber() / Math.pow(10, 6);
+
+      const currentPrice = calculateTokenPrice(
+        virtualSolReserves,
+        virtualTokenReserves
+      );
+
+      const holders = await getTokenHolders(connection, tokenMint, pubkey);
+
+      decodedTokens.push({
+        bondingCurve: pubkey.toString(),
+        tokenMint: decoded.token_mint.toString(),
+        name: tokenMetadata?.name || "Unknown Token",
+        symbol: tokenMetadata?.symbol || "???",
+        uri: tokenMetadata?.uri,
+        creator: decoded.creator.toString(),
+        virtualSolReserves,
+        virtualTokenReserves,
+        currentPrice,
+        realSolReserves: decoded.real_sol_reserves.toNumber() / 1e9,
+        realTokenReserves:
+          decoded.real_token_reserves.toNumber() / Math.pow(10, 6),
+        graduated: !decoded.graduated.Active,
+        bump: decoded.bump,
+        holders,
+      });
+    }
+
+    return decodedTokens;
+  } catch (error) {
+    console.error("Error while fetching available tokens:", error);
     return [];
   }
 };
@@ -249,3 +334,78 @@ async function getTokenMetadata(
     return null;
   }
 }
+
+export const calculateTokenPrice = (
+  solReserves: number,
+  tokenReserves: number,
+  tokensAmount: number = 1
+): number => {
+  if (tokenReserves === 0) {
+    return 0;
+  }
+
+  const pricePerToken = solReserves / tokenReserves;
+  return pricePerToken * tokensAmount;
+};
+
+export const formatPrice = (price: number, forAmount: number = 1): string => {
+  const amountText =
+    forAmount === 1 ? "" : ` per ${forAmount.toLocaleString()}`;
+
+  if (price === 0) return `0 SOL${amountText}`;
+
+  if (price < 0.000001) {
+    return `${price.toExponential(2)} SOL${amountText}`;
+  } else if (price < 0.001) {
+    return `${price.toFixed(8)} SOL${amountText}`;
+  } else if (price < 1) {
+    return `${price.toFixed(6)} SOL${amountText}`;
+  } else {
+    return `${price.toFixed(4)} SOL${amountText}`;
+  }
+};
+
+export const getTokenHolders = async (
+  connection: Connection,
+  tokenMint: PublicKey,
+  bondingCurveAddress: PublicKey // ← Add this parameter
+): Promise<number> => {
+  try {
+    const TOKEN_PROGRAM_ID = new PublicKey(
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+    );
+
+    const accounts = await connection.getProgramAccounts(TOKEN_PROGRAM_ID, {
+      filters: [
+        {
+          dataSize: 165, // Size of token account
+        },
+        {
+          memcmp: {
+            offset: 0, // Mint address is at offset 0
+            bytes: tokenMint.toBase58(),
+          },
+        },
+      ],
+    });
+
+    let holders = 0;
+    for (const { account, pubkey } of accounts) {
+      const amount = account.data.readBigUInt64LE(64);
+
+      const owner = new PublicKey(account.data.slice(32, 64));
+
+      if (amount > 0n) {
+        if (bondingCurveAddress && owner.equals(bondingCurveAddress)) {
+          continue; // Skip bonding curve
+        }
+        holders++;
+      }
+    }
+
+    return holders;
+  } catch (error) {
+    console.error("Error fetching token holders:", error);
+    return 0;
+  }
+};
