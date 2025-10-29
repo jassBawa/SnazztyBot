@@ -27,10 +27,10 @@ interface UserToken {
   bondingCurve: string;
   creator: string;
   tokenMint: string;
-  realSolReserves: number;
-  realTokenReserves: number;
-  virtualSolReserves: number;
-  virtualTokenReserves: number;
+  realSolReserves: bigint;
+  realTokenReserves: bigint;
+  virtualSolReserves: bigint;
+  virtualTokenReserves: bigint;
   name?: string;
   uri?: string;
   symbol?: string;
@@ -70,6 +70,10 @@ const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
 );
 const treasury = new PublicKey("8UoRQ1rBqwgf19vBadmG842k4t6TuqmgcVkEp5S28Rm2");
 const WSOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
+// Constants matching your Rust contract
+export const LAMPORTS_PER_SOL = BigInt(1_000_000_000);
+export const TOKEN_DECIMALS = 6; // Adjust if your token uses different decimals
+export const TOKEN_MULTIPLIER = BigInt(10 ** TOKEN_DECIMALS);
 
 export const createToken = async ({
   name,
@@ -218,7 +222,6 @@ export const getMyTokens = async ({
       });
     }
 
-    console.log(decodedTokens, "decodedTokens");
     return decodedTokens;
   } catch (error) {
     console.error("Error while fetching my tokens:", error);
@@ -258,10 +261,17 @@ export const getAvailableTokens = async ({
 
       const tokenMetadata = await getTokenMetadata(connection, tokenMint);
 
-      const virtualSolReserves = decoded.virtual_sol_reserves.toNumber();
-      const virtualTokenReserves = decoded.virtual_token_reserves.toNumber();
-      const realSolReserves = decoded.real_sol_reserves.toNumber();
-      const realTokenReserves = decoded.real_token_reserves.toNumber();
+      const virtualSolReserves = BigInt(decoded.virtual_sol_reserves);
+      const virtualTokenReserves = BigInt(decoded.virtual_token_reserves);
+      const realSolReserves = BigInt(decoded.real_sol_reserves);
+      const realTokenReserves = BigInt(decoded.real_token_reserves);
+
+      console.log("TOken metadata name: ", tokenMetadata?.name);
+
+      console.log("Virtual SOL reserves:", virtualSolReserves.toString());
+      console.log("Virtual token reserves:", virtualTokenReserves.toString());
+      console.log("Real SOL reserves:", realSolReserves.toString());
+      console.log("Real token reserves:", realTokenReserves.toString());
 
       const currentPrice = calculateTokenPrice(
         virtualSolReserves,
@@ -308,7 +318,7 @@ export const buyTokens = async ({
     const provider = new AnchorProvider(connection, wallet);
     const program = new Program(idl, provider);
 
-    const solAmount = new BN_VALUE(amount).mul(new BN_VALUE(1e9));
+    const solAmount = new BN_VALUE(amount).mul(new BN(LAMPORTS_PER_SOL));
 
     const [globalConfig] = PublicKey.findProgramAddressSync(
       [Buffer.from("global-config")],
@@ -328,37 +338,23 @@ export const buyTokens = async ({
 
     const buyerTokenAccount = await getAssociatedTokenAddress(
       tokenMint,
-      buyerKeypair.publicKey
+      buyerKeypair.publicKey,
+      true
     );
 
-    const wsolTempTokenAccountInfo = await getOrCreateAssociatedTokenAccount(
-      connection,
-      buyerKeypair,
+    const wsolTempTokenAccount = await getAssociatedTokenAddress(
       WSOL_MINT,
       bondingCurve,
       true
     );
-    const wsolTempTokenAccount = wsolTempTokenAccountInfo.address;
 
-    const liquidityTokenAccountInfo = await getOrCreateAssociatedTokenAccount(
-      connection,
-      buyerKeypair,
+    const liquidityTokenAccount = await getAssociatedTokenAddress(
       tokenMint,
       bondingCurve,
       true
     );
 
-    const liquidityTokenAccount = liquidityTokenAccountInfo.address;
-
     const tx = new Transaction();
-
-    tx.add(
-      SystemProgram.transfer({
-        fromPubkey: buyerKeypair.publicKey,
-        toPubkey: bondingCurve,
-        lamports: solAmount.toNumber(),
-      })
-    );
 
     const programIx = await program.methods
       .buyTokens(solAmount)
@@ -373,7 +369,6 @@ export const buyTokens = async ({
         liquidityTokenAccount,
         wsolMintAccount: WSOL_MINT,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         rent: SYSVAR_RENT_PUBKEY,
       })
@@ -528,17 +523,67 @@ async function getTokenMetadata(
   }
 }
 
-export const calculateTokenPrice = (
-  solReserves: number,
-  tokenReserves: number,
-  tokensAmount: number = 1
+// For buying tokens
+export const calculateTokensOut = (
+  solAmount: number, // in lamports
+  solReserves: number, // in lamports
+  tokenReserves: number // in smallest token units
 ): number => {
-  if (tokenReserves === 0) {
+  const solAmountU128 = BigInt(Math.floor(solAmount));
+  const solReservesU128 = BigInt(Math.floor(solReserves));
+  const tokenReservesU128 = BigInt(Math.floor(tokenReserves));
+
+  if (solReservesU128 === 0n || tokenReservesU128 === 0n) {
+    throw new Error("Invalid reserves");
+  }
+
+  // Constant product: k = x * y
+  const k = solReservesU128 * tokenReservesU128;
+
+  // New reserves after adding SOL
+  const newSolReserves = solReservesU128 + solAmountU128;
+
+  // Calculate new token reserves
+  const newTokenReserves = k / newSolReserves;
+
+  // Tokens out is the difference
+  const tokensOut = tokenReservesU128 - newTokenReserves;
+
+  return Number(tokensOut);
+};
+
+// Calculate current token price in lamports per token (smallest unit)
+export const calculateTokenPrice = (
+  solReserves: bigint, // in lamports
+  tokenReserves: bigint // in smallest token units
+): number => {
+  if (solReserves === 0n || tokenReserves === 0n) {
     return 0;
   }
 
-  const pricePerToken = solReserves / tokenReserves;
-  return pricePerToken * tokensAmount;
+  const sol = solReserves / LAMPORTS_PER_SOL;
+  const tokens = tokenReserves / TOKEN_MULTIPLIER;
+
+  const priceSOLPerToken = Number(sol) / Number(tokens);
+
+  return priceSOLPerToken;
+};
+
+export const calculateSolOut = (
+  tokensIn: bigint, // in smallest token units
+  solReserves: bigint, // in lamports
+  tokenReserves: bigint // in smallest token units
+): bigint => {
+  if (solReserves === 0n || tokenReserves === 0n) {
+    return 0n;
+  }
+
+  const k = solReserves * tokenReserves;
+  const newTokenReserves = tokenReserves + tokensIn;
+  const newSolReserves = k / newTokenReserves;
+  const solOut = solReserves - newSolReserves;
+
+  return solOut;
 };
 
 export const formatPrice = (price: number, forAmount: number = 1): string => {
@@ -601,28 +646,4 @@ export const getTokenHolders = async (
     console.error("Error fetching token holders:", error);
     return 0;
   }
-};
-
-export const calculateSolOut = (
-  tokensIn: number,
-  initialSolReserves: number,
-  initialTokenReserves: number
-): number => {
-  const tokensInU128 = BigInt(Math.floor(tokensIn));
-  const initialSolU128 = BigInt(Math.floor(initialSolReserves));
-  const initialTokenU128 = BigInt(Math.floor(initialTokenReserves));
-
-  console.log(initialSolReserves, initialTokenReserves);
-
-  if (initialSolU128 === 0n || initialTokenU128 === 0n) {
-    throw new Error("Invalid reserves");
-  }
-
-  const k = initialSolU128 * initialTokenU128;
-  const newTokenReserves = initialTokenU128 + tokensInU128;
-
-  const newSolReserves = k / newTokenReserves;
-  const solOut = initialSolU128 - newSolReserves;
-
-  return Number(solOut);
 };

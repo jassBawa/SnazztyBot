@@ -15,7 +15,9 @@ import {
   formatPrice,
   getAvailableTokens,
   getMyTokens,
+  LAMPORTS_PER_SOL,
   sellTokens,
+  TOKEN_MULTIPLIER,
 } from "@repo/services/token";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getOrCreateUserKeypair } from "@repo/services/solana";
@@ -219,12 +221,12 @@ export const registerTokenCommands = async (bot: Telegraf) => {
           return;
         }
 
-        const estimatedSolOut =
-          calculateSolOut(
-            tokenAmount * 1e6,
-            token.virtualSolReserves, // already in lamports
-            token.virtualTokenReserves // already in token units
-          ) / 1e9;
+        const solOutBigInt = calculateSolOut(
+          BigInt(tokenAmount) * TOKEN_MULTIPLIER,
+          BigInt(token.virtualSolReserves),
+          BigInt(token.virtualTokenReserves)
+        );
+        const estimatedSolOut = Number(solOutBigInt) / Number(LAMPORTS_PER_SOL);
 
         await ctx.reply(
           `🔄 *Confirm Sell*\n\n` +
@@ -400,16 +402,14 @@ export const registerTokenCommands = async (bot: Telegraf) => {
 
         // Build inline keyboard with token buttons
         const tokenButtons = availableTokens.map((token) => {
-          const priceFor1M = calculateTokenPrice(
-            token.virtualSolReserves,
-            token.virtualTokenReserves,
+          const priceFor1M = formatPrice(
+            token.currentPrice * 1_000_000,
             1_000_000
           );
-          const priceFormatted = formatPrice(priceFor1M, 1_000_000);
 
           return [
             Markup.button.callback(
-              `${token.symbol} - ${priceFormatted}`,
+              `${token.symbol} - ${priceFor1M}`,
               `TOKEN_DETAILS:${token.tokenMint}`
             ),
           ];
@@ -653,7 +653,7 @@ Proceed with purchase?
         programId,
         buyerKeypair,
         tokenMint: new PublicKey(tokenMint),
-        amount: solAmount,
+        amount: solAmount, // Multiply inside BN
         creator: new PublicKey(token.creator),
       });
 
