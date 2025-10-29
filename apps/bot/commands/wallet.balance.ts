@@ -1,5 +1,9 @@
 import { Telegraf } from "telegraf";
-import { getOrCreateUserKeypair, getBalances, getTokenBalances } from "@repo/services/solana";
+import {
+  getOrCreateUserKeypair,
+  getBalances,
+  getTokenBalances,
+} from "@repo/services/solana";
 import { getTelegramId } from "../utils/telegram";
 import { getSolPriceUSD, formatUSD } from "@repo/services/price";
 
@@ -37,24 +41,28 @@ export function registerWalletBalance(bot: Telegraf) {
         tokenBalances.forEach((token, index) => {
           const amount = token.amount.toFixed(token.decimals);
           const isLast = index === tokenBalances.length - 1;
-          const prefix = isLast ? '└─' : '├─';
-          message += `${prefix} ${token.symbol || 'Unknown'}: ${amount}\n`;
+          const prefix = isLast ? "└─" : "├─";
+          message += `${prefix} ${token.symbol || "Unknown"}: ${amount}\n`;
         });
       } else {
         message += `\n🪙 *Token Balances*\n`;
         message += `└─ No tokens found\n`;
       }
 
-      await ctx.reply(message, { parse_mode: 'Markdown' });
+      await ctx.reply(message, { parse_mode: "Markdown" });
     } catch (err: any) {
-      await ctx.reply(`❌ Failed to fetch balance: ${err?.message ?? "unknown error"}`);
+      await ctx.reply(
+        `❌ Failed to fetch balance: ${err?.message ?? "unknown error"}`
+      );
     }
   });
 
   // Also handle action from wallet button
   bot.action("WALLET_BALANCE", async (ctx) => {
     try {
-      await ctx.editMessageText("⏳ Loading wallet balance...", { parse_mode: 'Markdown' });
+      await ctx.editMessageText("⏳ Loading wallet balance...", {
+        parse_mode: "Markdown",
+      });
 
       const telegramId = getTelegramId(ctx);
       const kp = await getOrCreateUserKeypair(telegramId);
@@ -85,8 +93,8 @@ export function registerWalletBalance(bot: Telegraf) {
         tokenBalances.forEach((token, index) => {
           const amount = token.amount.toFixed(token.decimals);
           const isLast = index === tokenBalances.length - 1;
-          const prefix = isLast ? '└─' : '├─';
-          message += `${prefix} ${token.symbol || 'Unknown'}: ${amount}\n`;
+          const prefix = isLast ? "└─" : "├─";
+          message += `${prefix} ${token.symbol || "Unknown"}: ${amount}\n`;
         });
       } else {
         message += `\n🪙 *Token Balances*\n`;
@@ -97,17 +105,18 @@ export function registerWalletBalance(bot: Telegraf) {
       const { backToMainKeyboard } = await import("../utils/keyboards");
 
       await ctx.editMessageText(message, {
-        parse_mode: 'Markdown',
-        ...backToMainKeyboard()
+        parse_mode: "Markdown",
+        ...backToMainKeyboard(),
       });
       await ctx.answerCbQuery();
     } catch (err: any) {
-      await ctx.editMessageText(`❌ Failed to fetch balance: ${err?.message ?? "unknown error"}`, {
-        parse_mode: 'Markdown'
-      });
+      await ctx.editMessageText(
+        `❌ Failed to fetch balance: ${err?.message ?? "unknown error"}`,
+        {
+          parse_mode: "Markdown",
+        }
+      );
       await ctx.answerCbQuery();
     }
   });
 }
-
-

@@ -52,10 +52,6 @@
           }
         },
         {
-          "name": "treasury",
-          "writable": true
-        },
-        {
           "name": "token_mint",
           "writable": true
         },
@@ -739,10 +735,6 @@
           }
         },
         {
-          "name": "treasury",
-          "writable": true
-        },
-        {
           "name": "seller_token_account",
           "writable": true
         },
@@ -901,31 +893,41 @@
     },
     {
       "code": 6015,
+      "name": "InvalidVirtualSolReserves",
+      "msg": "Invalid Virtual Sol Reserves"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidVirtualTokenReserves",
+      "msg": "Invalid Virtual Token Reserves"
+    },
+    {
+      "code": 6017,
       "name": "InvalidConstant",
       "msg": "Invalid Constant"
     },
     {
-      "code": 6016,
+      "code": 6018,
       "name": "InvalidNewSolReserves",
       "msg": "Problem with calculating sol reserves"
     },
     {
-      "code": 6017,
+      "code": 6019,
       "name": "InvalidNewTokenReserves",
       "msg": "Problem with calculating new token reserves"
     },
     {
-      "code": 6018,
+      "code": 6020,
       "name": "InvalidTokensCalculation",
       "msg": "Problem with calculating tokens out"
     },
     {
-      "code": 6019,
+      "code": 6021,
       "name": "NumericOverflow",
       "msg": "Numeric Overflow"
     },
     {
-      "code": 6020,
+      "code": 6022,
       "name": "DivideByZero",
       "msg": "Divide By Zero"
     }

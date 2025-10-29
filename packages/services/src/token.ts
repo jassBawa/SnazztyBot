@@ -21,7 +21,7 @@ import {
 import idl from "./idl/program.json";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
-import { BN } from "bn.js";
+import BN, { BN as BN_VALUE } from "bn.js";
 
 interface UserToken {
   bondingCurve: string;
@@ -38,6 +38,23 @@ interface UserToken {
   bump: number;
   currentPrice: number;
   holders: number;
+}
+interface BuyTokensParams {
+  connection: Connection;
+  programId: PublicKey;
+  buyerKeypair: Keypair;
+  tokenMint: PublicKey;
+  amount: number;
+  creator: PublicKey;
+}
+
+interface SellTokensParams {
+  connection: Connection;
+  programId: PublicKey;
+  sellerKeypair: Keypair;
+  tokenMint: PublicKey;
+  tokensIn: BN;
+  creator: PublicKey;
 }
 
 interface CreateToken {
@@ -171,9 +188,10 @@ export const getMyTokens = async ({
 
       const tokenMetadata = await getTokenMetadata(connection, tokenMint);
 
-      const virtualSolReserves = decoded.virtual_sol_reserves.toNumber() / 1e9;
-      const virtualTokenReserves =
-        decoded.virtual_token_reserves.toNumber() / Math.pow(10, 6);
+      const virtualSolReserves = decoded.virtual_sol_reserves.toNumber();
+      const virtualTokenReserves = decoded.virtual_token_reserves.toNumber();
+      const realSolReserves = decoded.real_sol_reserves.toNumber();
+      const realTokenReserves = decoded.real_token_reserves.toNumber();
 
       const currentPrice = calculateTokenPrice(
         virtualSolReserves,
@@ -192,9 +210,8 @@ export const getMyTokens = async ({
         virtualSolReserves,
         virtualTokenReserves,
         currentPrice,
-        realSolReserves: decoded.real_sol_reserves.toNumber() / 1e9,
-        realTokenReserves:
-          decoded.real_token_reserves.toNumber() / Math.pow(10, 6),
+        realSolReserves,
+        realTokenReserves,
         graduated: !decoded.graduated.Active,
         bump: decoded.bump,
         holders,
@@ -241,9 +258,10 @@ export const getAvailableTokens = async ({
 
       const tokenMetadata = await getTokenMetadata(connection, tokenMint);
 
-      const virtualSolReserves = decoded.virtual_sol_reserves.toNumber() / 1e9;
-      const virtualTokenReserves =
-        decoded.virtual_token_reserves.toNumber() / Math.pow(10, 6);
+      const virtualSolReserves = decoded.virtual_sol_reserves.toNumber();
+      const virtualTokenReserves = decoded.virtual_token_reserves.toNumber();
+      const realSolReserves = decoded.real_sol_reserves.toNumber();
+      const realTokenReserves = decoded.real_token_reserves.toNumber();
 
       const currentPrice = calculateTokenPrice(
         virtualSolReserves,
@@ -262,9 +280,8 @@ export const getAvailableTokens = async ({
         virtualSolReserves,
         virtualTokenReserves,
         currentPrice,
-        realSolReserves: decoded.real_sol_reserves.toNumber() / 1e9,
-        realTokenReserves:
-          decoded.real_token_reserves.toNumber() / Math.pow(10, 6),
+        realSolReserves,
+        realTokenReserves,
         graduated: !decoded.graduated.Active,
         bump: decoded.bump,
         holders,
@@ -275,6 +292,171 @@ export const getAvailableTokens = async ({
   } catch (error) {
     console.error("Error while fetching available tokens:", error);
     return [];
+  }
+};
+
+export const buyTokens = async ({
+  connection,
+  programId,
+  buyerKeypair,
+  tokenMint,
+  amount,
+  creator,
+}: BuyTokensParams) => {
+  try {
+    const wallet = new Wallet(buyerKeypair);
+    const provider = new AnchorProvider(connection, wallet);
+    const program = new Program(idl, provider);
+
+    const solAmount = new BN_VALUE(amount).mul(new BN_VALUE(1e9));
+
+    const [globalConfig] = PublicKey.findProgramAddressSync(
+      [Buffer.from("global-config")],
+      programId
+    );
+
+    const [bondingCurve] = PublicKey.findProgramAddressSync(
+      [Buffer.from("bonding-curve"), tokenMint.toBuffer(), creator.toBuffer()],
+      programId
+    );
+
+    const bondingCurveTokenAccount = await getAssociatedTokenAddress(
+      tokenMint,
+      bondingCurve,
+      true
+    );
+
+    const buyerTokenAccount = await getAssociatedTokenAddress(
+      tokenMint,
+      buyerKeypair.publicKey
+    );
+
+    const wsolTempTokenAccountInfo = await getOrCreateAssociatedTokenAccount(
+      connection,
+      buyerKeypair,
+      WSOL_MINT,
+      bondingCurve,
+      true
+    );
+    const wsolTempTokenAccount = wsolTempTokenAccountInfo.address;
+
+    const liquidityTokenAccountInfo = await getOrCreateAssociatedTokenAccount(
+      connection,
+      buyerKeypair,
+      tokenMint,
+      bondingCurve,
+      true
+    );
+
+    const liquidityTokenAccount = liquidityTokenAccountInfo.address;
+
+    const tx = new Transaction();
+
+    tx.add(
+      SystemProgram.transfer({
+        fromPubkey: buyerKeypair.publicKey,
+        toPubkey: bondingCurve,
+        lamports: solAmount.toNumber(),
+      })
+    );
+
+    const programIx = await program.methods
+      .buyTokens(solAmount)
+      .accounts({
+        buyer: buyerKeypair.publicKey,
+        globalConfig,
+        tokenMint,
+        bondingCurve,
+        bondingCurveTokenAccount,
+        buyerTokenAccount,
+        wsolTempTokenAccount,
+        liquidityTokenAccount,
+        wsolMintAccount: WSOL_MINT,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .instruction();
+
+    tx.add(programIx);
+
+    const signature = await provider.sendAndConfirm(tx);
+
+    return {
+      success: true,
+      signature,
+    };
+  } catch (error) {
+    console.error("Error buying tokens:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+      signature: null,
+    };
+  }
+};
+
+export const sellTokens = async ({
+  creator,
+  programId,
+  connection,
+  tokensIn,
+  tokenMint,
+  sellerKeypair,
+}: SellTokensParams) => {
+  try {
+    const [bondingCurve] = PublicKey.findProgramAddressSync(
+      [Buffer.from("bonding-curve"), tokenMint.toBuffer(), creator.toBuffer()],
+      programId
+    );
+
+    const [globalConfig] = PublicKey.findProgramAddressSync(
+      [Buffer.from("global-config")],
+      programId
+    );
+
+    const sellerTokenAccount = await getAssociatedTokenAddress(
+      tokenMint,
+      sellerKeypair.publicKey
+    );
+
+    const bondingCurveTokenAccount = await getAssociatedTokenAddress(
+      tokenMint,
+      bondingCurve,
+      true
+    );
+
+    const wallet = new Wallet(sellerKeypair);
+
+    const provider = new AnchorProvider(connection, wallet);
+    const program = new Program(idl, provider);
+
+    const tx = await program.methods
+      .sellTokens(tokensIn)
+      .accounts({
+        seller: sellerKeypair.publicKey,
+        tokenMint,
+        bondingCurve,
+        globalConfig,
+        sellerTokenAccount,
+        bondingCurveTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    return {
+      success: true,
+      signature: tx,
+    };
+  } catch (error) {
+    console.error("Error while selling tokens: ", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+      signature: null,
+    };
   }
 };
 
@@ -421,114 +603,26 @@ export const getTokenHolders = async (
   }
 };
 
-interface BuyTokensParams {
-  connection: Connection;
-  programId: PublicKey;
-  buyerKeypair: Keypair;
-  tokenMint: PublicKey;
-  amount: number;
-  creator: PublicKey;
-}
+export const calculateSolOut = (
+  tokensIn: number,
+  initialSolReserves: number,
+  initialTokenReserves: number
+): number => {
+  const tokensInU128 = BigInt(Math.floor(tokensIn));
+  const initialSolU128 = BigInt(Math.floor(initialSolReserves));
+  const initialTokenU128 = BigInt(Math.floor(initialTokenReserves));
 
-export const buyTokens = async ({
-  connection,
-  programId,
-  buyerKeypair,
-  tokenMint,
-  amount,
-  creator,
-}: BuyTokensParams) => {
-  try {
-    const wallet = new Wallet(buyerKeypair);
-    const provider = new AnchorProvider(connection, wallet);
-    const program = new Program(idl, provider);
+  console.log(initialSolReserves, initialTokenReserves);
 
-    const solAmount = new BN(amount).mul(new BN(1e9));
-
-    const [globalConfig] = PublicKey.findProgramAddressSync(
-      [Buffer.from("global-config")],
-      programId
-    );
-
-    const [bondingCurve] = PublicKey.findProgramAddressSync(
-      [Buffer.from("bonding-curve"), tokenMint.toBuffer(), creator.toBuffer()],
-      programId
-    );
-
-    const bondingCurveTokenAccount = await getAssociatedTokenAddress(
-      tokenMint,
-      bondingCurve,
-      true
-    );
-
-    const buyerTokenAccount = await getAssociatedTokenAddress(
-      tokenMint,
-      buyerKeypair.publicKey
-    );
-
-    const wsolTempTokenAccountInfo = await getOrCreateAssociatedTokenAccount(
-      connection,
-      buyerKeypair,
-      WSOL_MINT,
-      bondingCurve,
-      true
-    );
-    const wsolTempTokenAccount = wsolTempTokenAccountInfo.address;
-
-    const liquidityTokenAccountInfo = await getOrCreateAssociatedTokenAccount(
-      connection,
-      buyerKeypair,
-      tokenMint,
-      bondingCurve,
-      true
-    );
-
-    const liquidityTokenAccount = liquidityTokenAccountInfo.address;
-
-    const tx = new Transaction();
-
-    tx.add(
-      SystemProgram.transfer({
-        fromPubkey: buyerKeypair.publicKey,
-        toPubkey: bondingCurve,
-        lamports: solAmount.toNumber(),
-      })
-    );
-
-    const programIx = await program.methods
-      .buyTokens(solAmount)
-      .accounts({
-        buyer: buyerKeypair.publicKey,
-        globalConfig,
-        treasury,
-        tokenMint,
-        bondingCurve,
-        bondingCurveTokenAccount,
-        buyerTokenAccount,
-        wsolTempTokenAccount,
-        liquidityTokenAccount,
-        wsolMintAccount: WSOL_MINT,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        rent: SYSVAR_RENT_PUBKEY,
-      })
-      .instruction();
-
-    tx.add(programIx);
-
-    const signature = await provider.sendAndConfirm(tx);
-
-    return {
-      success: true,
-      signature,
-    };
-  } catch (error) {
-    console.error("Error buying tokens:", error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-      signature: null,
-    };
+  if (initialSolU128 === 0n || initialTokenU128 === 0n) {
+    throw new Error("Invalid reserves");
   }
+
+  const k = initialSolU128 * initialTokenU128;
+  const newTokenReserves = initialTokenU128 + tokensInU128;
+
+  const newSolReserves = k / newTokenReserves;
+  const solOut = initialSolU128 - newSolReserves;
+
+  return Number(solOut);
 };

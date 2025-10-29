@@ -9,15 +9,18 @@ import { Telegraf, Markup } from "telegraf";
 import { tokenOptionsKeyboard } from "utils/keyboards";
 import {
   buyTokens,
+  calculateSolOut,
   calculateTokenPrice,
   createToken,
   formatPrice,
   getAvailableTokens,
   getMyTokens,
+  sellTokens,
 } from "@repo/services/token";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getOrCreateUserKeypair } from "@repo/services/solana";
 import { getTelegramId } from "utils/telegram";
+import { BN } from "bn.js";
 
 export const registerTokenCommands = async (bot: Telegraf) => {
   const connection = new Connection(process.env.SOLANA_RPC_URL!);
@@ -73,114 +76,184 @@ export const registerTokenCommands = async (bot: Telegraf) => {
   });
 
   // Handle text messages during token creation
+  // Handle text messages during token creation
   bot.on("text", async (ctx) => {
     const userId = ctx.from.id;
     const session = getSession(userId);
+    const sellSession = sellSessions[userId];
 
-    if (!session) return; // Not in token creation flow
+    // Handle token creation flow
+    if (session) {
+      const text = ctx.message.text.trim();
 
-    const text = ctx.message.text.trim();
+      switch (session.step) {
+        case "name":
+          if (text.length < 3 || text.length > 32) {
+            return ctx.reply(
+              "⚠️ Token name must be between 3 and 32 characters.\n\n" +
+                "Please try again:"
+            );
+          }
 
-    switch (session.step) {
-      case "name":
-        if (text.length < 3 || text.length > 32) {
-          return ctx.reply(
-            "⚠️ Token name must be between 3 and 32 characters.\n\n" +
-              "Please try again:"
+          updateSession(userId, { name: text, step: "symbol" });
+
+          await ctx.reply(
+            "✅ Token name set!\n\n" +
+              "📝 *Step 2/3: Token Symbol*\n\n" +
+              "Enter your token symbol (e.g., 'MAT', 'COOL'):\n" +
+              "_(Usually 3-5 uppercase letters)_",
+            {
+              parse_mode: "Markdown",
+              ...Markup.inlineKeyboard([
+                [
+                  Markup.button.callback(
+                    "❌ Cancel",
+                    "ACTION_TOKEN_CREATE_CANCEL"
+                  ),
+                ],
+              ]),
+            }
           );
+          break;
+
+        case "symbol":
+          if (text.length < 2 || text.length > 10) {
+            return ctx.reply(
+              "⚠️ Token symbol must be between 2 and 10 characters.\n\n" +
+                "Please try again:"
+            );
+          }
+
+          const symbol = text.toUpperCase();
+          updateSession(userId, { symbol, step: "uri" });
+
+          await ctx.reply(
+            "✅ Token symbol set!\n\n" +
+              "📝 *Step 3/3: Metadata URI*\n\n" +
+              "Enter the metadata URI for your token:\n" +
+              "_(This should be a link to your token's JSON metadata, e.g., from IPFS or Arweave)_\n\n" +
+              "Example: `https://arweave.net/abc123...`",
+            {
+              parse_mode: "Markdown",
+              ...Markup.inlineKeyboard([
+                [
+                  Markup.button.callback(
+                    "❌ Cancel",
+                    "ACTION_TOKEN_CREATE_CANCEL"
+                  ),
+                ],
+              ]),
+            }
+          );
+          break;
+
+        case "uri":
+          if (!text.startsWith("http://") && !text.startsWith("https://")) {
+            return ctx.reply(
+              "⚠️ URI must be a valid URL starting with http:// or https://\n\n" +
+                "Please try again:"
+            );
+          }
+
+          updateSession(userId, { uri: text, step: "confirm" });
+
+          const updatedSession = getSession(userId);
+
+          await ctx.reply(
+            "✅ All information collected!\n\n" +
+              "📋 *Token Summary:*\n\n" +
+              `• *Name:* ${updatedSession?.name}\n` +
+              `• *Symbol:* ${updatedSession?.symbol}\n` +
+              `• *URI:* ${updatedSession?.uri}\n\n` +
+              "⚠️ *Important:* Creating a token will cost ~0.01 SOL in transaction fees.\n\n" +
+              "Ready to create your token?",
+            {
+              parse_mode: "Markdown",
+              ...Markup.inlineKeyboard([
+                [
+                  Markup.button.callback(
+                    "✅ Confirm & Create",
+                    "ACTION_TOKEN_CONFIRM"
+                  ),
+                ],
+                [
+                  Markup.button.callback(
+                    "❌ Cancel",
+                    "ACTION_TOKEN_CREATE_CANCEL"
+                  ),
+                ],
+              ]),
+            }
+          );
+          break;
+      }
+      return;
+    }
+
+    // Handle sell flow
+    if (sellSession && sellSession.step === "AWAITING_AMOUNT") {
+      const text = ctx.message.text.trim();
+
+      try {
+        const tokenAmount = parseFloat(text);
+        if (isNaN(tokenAmount) || tokenAmount <= 0) {
+          await ctx.reply("❌ Invalid amount. Please enter a valid number.");
+          return;
         }
 
-        updateSession(userId, { name: text, step: "symbol" });
+        sellSession.tokenAmount = tokenAmount;
+        sellSession.step = "CONFIRMING_SELL";
+
+        // Fetch token info for confirmation
+        const availableTokens = await getAvailableTokens({
+          connection,
+          programId,
+        });
+        const token = availableTokens.find(
+          (t) => t.tokenMint === sellSession.mintAddress
+        );
+
+        if (!token) {
+          await ctx.reply("❌ Token not found.");
+          delete sellSessions[userId];
+          return;
+        }
+
+        const estimatedSolOut =
+          calculateSolOut(
+            tokenAmount * 1e6,
+            token.virtualSolReserves, // already in lamports
+            token.virtualTokenReserves // already in token units
+          ) / 1e9;
 
         await ctx.reply(
-          "✅ Token name set!\n\n" +
-            "📝 *Step 2/3: Token Symbol*\n\n" +
-            "Enter your token symbol (e.g., 'MAT', 'COOL'):\n" +
-            "_(Usually 3-5 uppercase letters)_",
+          `🔄 *Confirm Sell*\n\n` +
+            `*Token:* ${token.name} (${token.symbol})\n` +
+            `*Amount:* ${tokenAmount.toLocaleString()} tokens\n` +
+            `*Estimated SOL:* ~${estimatedSolOut.toFixed(9)} SOL\n\n` +
+            "Proceed with the sale?",
           {
             parse_mode: "Markdown",
             ...Markup.inlineKeyboard([
               [
                 Markup.button.callback(
+                  "✅ Confirm",
+                  `SELL_CONFIRM:${sellSession.mintAddress}`
+                ),
+                Markup.button.callback(
                   "❌ Cancel",
-                  "ACTION_TOKEN_CREATE_CANCEL"
+                  `TOKEN_SELL:${sellSession.mintAddress}`
                 ),
               ],
             ]),
           }
         );
-        break;
-
-      case "symbol":
-        if (text.length < 2 || text.length > 10) {
-          return ctx.reply(
-            "⚠️ Token symbol must be between 2 and 10 characters.\n\n" +
-              "Please try again:"
-          );
-        }
-
-        const symbol = text.toUpperCase();
-        updateSession(userId, { symbol, step: "uri" });
-
-        await ctx.reply(
-          "✅ Token symbol set!\n\n" +
-            "📝 *Step 3/3: Metadata URI*\n\n" +
-            "Enter the metadata URI for your token:\n" +
-            "_(This should be a link to your token's JSON metadata, e.g., from IPFS or Arweave)_\n\n" +
-            "Example: `https://arweave.net/abc123...`",
-          {
-            parse_mode: "Markdown",
-            ...Markup.inlineKeyboard([
-              [
-                Markup.button.callback(
-                  "❌ Cancel",
-                  "ACTION_TOKEN_CREATE_CANCEL"
-                ),
-              ],
-            ]),
-          }
-        );
-        break;
-
-      case "uri":
-        if (!text.startsWith("http://") && !text.startsWith("https://")) {
-          return ctx.reply(
-            "⚠️ URI must be a valid URL starting with http:// or https://\n\n" +
-              "Please try again:"
-          );
-        }
-
-        updateSession(userId, { uri: text, step: "confirm" });
-
-        const updatedSession = getSession(userId);
-
-        await ctx.reply(
-          "✅ All information collected!\n\n" +
-            "📋 *Token Summary:*\n\n" +
-            `• *Name:* ${updatedSession?.name}\n` +
-            `• *Symbol:* ${updatedSession?.symbol}\n` +
-            `• *URI:* ${updatedSession?.uri}\n\n` +
-            "⚠️ *Important:* Creating a token will cost ~0.01 SOL in transaction fees.\n\n" +
-            "Ready to create your token?",
-          {
-            parse_mode: "Markdown",
-            ...Markup.inlineKeyboard([
-              [
-                Markup.button.callback(
-                  "✅ Confirm & Create",
-                  "ACTION_TOKEN_CONFIRM"
-                ),
-              ],
-              [
-                Markup.button.callback(
-                  "❌ Cancel",
-                  "ACTION_TOKEN_CREATE_CANCEL"
-                ),
-              ],
-            ]),
-          }
-        );
-        break;
+      } catch (error) {
+        console.error("Error in sell amount input:", error);
+        await ctx.reply("❌ An error occurred. Please try again.");
+        delete sellSessions[userId];
+      }
+      return;
     }
   });
 
@@ -388,10 +461,6 @@ export const registerTokenCommands = async (bot: Telegraf) => {
 
 💰 *Current Price:*
 - ${priceFor1M}
-
-📊 *Market Stats:*
-- Market Cap: ${token.realSolReserves.toFixed(4)} SOL
-- Holders: ${token.holders.toLocaleString()}
 
 📍 *Mint Address:*
 \`${token.tokenMint}\`
@@ -660,25 +729,158 @@ Proceed with purchase?
   });
 
   // Action: Sell token
+  // Action: Sell token - Initial trigger
+  let sellSessions: Record<number, any> = {};
   bot.action(/TOKEN_SELL:(.+)/, async (ctx) => {
     await ctx.answerCbQuery();
 
     const mintAddress = ctx.match[1];
+    const userId = ctx.from.id;
 
-    await ctx.reply(
-      "🔴 *Sell Token*\n\n" +
-        `Token: \`${mintAddress}\`\n\n` +
-        "How many tokens do you want to sell?\n" +
-        "_(Type the amount or percentage, e.g., 100 or 50%)_",
-      {
-        parse_mode: "Markdown",
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback("❌ Cancel", "ACTION_TOKEN_AVAILABLE")],
-        ]),
+    // Initialize sell session
+    sellSessions[userId] = {
+      mintAddress,
+      step: "AWAITING_AMOUNT",
+    };
+
+    try {
+      // Fetch token info
+      const availableTokens = await getAvailableTokens({
+        connection,
+        programId,
+      });
+      const token = availableTokens.find((t) => t.tokenMint === mintAddress);
+
+      if (!token) {
+        await ctx.reply("❌ Token not found.");
+        delete sellSessions[userId];
+        return;
       }
-    );
 
-    // TODO: Create session to track sell flow
-    // createSellSession(ctx.from.id, mintAddress);
+      await ctx.reply(
+        `🔴 *Sell ${token.name} (${token.symbol})*\n\n` +
+          `Token: \`${mintAddress}\`\n\n` +
+          "How many tokens do you want to sell?\n" +
+          "_(Type the amount, e.g., 1000000)_",
+        {
+          parse_mode: "Markdown",
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                "❌ Cancel",
+                `TOKEN_DETAILS:${mintAddress}`
+              ),
+            ],
+          ]),
+        }
+      );
+    } catch (error) {
+      console.error("Error loading sell screen:", error);
+      await ctx.reply("❌ Error loading sell options.");
+      delete sellSessions[userId];
+    }
+  });
+
+  // Handle sell confirmation
+  bot.action(/SELL_CONFIRM:(.+)/, async (ctx) => {
+    await ctx.answerCbQuery();
+
+    const mintAddress = ctx.match[1];
+    const userId = ctx.from.id;
+    const sellSession = sellSessions[userId];
+
+    if (!sellSession || !sellSession.tokenAmount) {
+      await ctx.reply("❌ Session expired. Please try again.");
+      delete sellSessions[userId];
+      return;
+    }
+
+    const tokenAmount = sellSession.tokenAmount;
+
+    try {
+      const telegramId = getTelegramId(ctx);
+      const sellerKeypair = await getOrCreateUserKeypair(telegramId);
+      const programId = new PublicKey(process.env.PROGRAM_ID!);
+
+      // Fetch token info
+      const availableTokens = await getAvailableTokens({
+        connection,
+        programId,
+      });
+      const token = availableTokens.find((t) => t.tokenMint === mintAddress);
+
+      if (!token) {
+        await ctx.reply("❌ Token not found.");
+        delete sellSessions[userId];
+        return;
+      }
+
+      await ctx.reply(
+        "⏳ Processing your sale...\nThis may take a few seconds."
+      );
+
+      const result = await sellTokens({
+        connection,
+        programId,
+        sellerKeypair,
+        tokenMint: new PublicKey(mintAddress),
+        tokensIn: new BN(tokenAmount * 1e6),
+        creator: new PublicKey(token.creator),
+      });
+
+      if (result.success) {
+        await ctx.reply(
+          `✅ *Sale Successful!*\n\n` +
+            `You sold ${tokenAmount.toLocaleString()} ${token.symbol} tokens\n\n` +
+            `Transaction: \`${result.signature}\`\n\n` +
+            `View on Solscan: https://solscan.io/tx/${result.signature}?cluster=devnet`,
+          {
+            parse_mode: "Markdown",
+            ...Markup.inlineKeyboard([
+              [Markup.button.callback("📋 My Tokens", "ACTION_MY_TOKEN_LIST")],
+              [
+                Markup.button.callback(
+                  "🔙 Back to Token",
+                  `TOKEN_DETAILS:${mintAddress}`
+                ),
+              ],
+              [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
+            ]),
+          }
+        );
+      } else {
+        await ctx.reply(
+          `❌ *Sale Failed*\n\n` +
+            `Error: ${result.error}\n\n` +
+            `Please try again or contact support.`,
+          {
+            parse_mode: "Markdown",
+            ...Markup.inlineKeyboard([
+              [
+                Markup.button.callback(
+                  "🔄 Try Again",
+                  `TOKEN_SELL:${mintAddress}`
+                ),
+              ],
+              [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
+            ]),
+          }
+        );
+      }
+
+      delete sellSessions[userId];
+    } catch (error) {
+      console.error("Error executing sale:", error);
+      await ctx.reply(
+        `❌ *Error*\n\n${error instanceof Error ? error.message : "Unknown error occurred"}`,
+        {
+          parse_mode: "Markdown",
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback("🏠 Main Menu", "ACTION_MAIN_MENU")],
+          ]),
+        }
+      );
+      delete sellSessions[userId];
+    }
   });
 };
