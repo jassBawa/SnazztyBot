@@ -235,7 +235,23 @@ export const getAvailableTokens = async ({
 }: {
   connection: Connection;
   programId: PublicKey;
-}) => {
+}): Promise<UserToken[]> => {
+  // TODO: find good approach for caching
+  const CACHE_TTL_MS = Number(process.env.TOKENS_CACHE_TTL_MS ?? 100_000);
+  const cacheKey = programId.toBase58();
+  // module-scoped cache stored on global
+  const g: any = global as any;
+  if (!g.__BC_TOKEN_CACHE__) {
+    g.__BC_TOKEN_CACHE__ = new Map<string, { t: number; data: UserToken[] }>();
+  }
+  const cache: Map<string, { t: number; data: UserToken[] }> = g.__BC_TOKEN_CACHE__;
+  const hit = cache.get(cacheKey);
+  const now = Date.now();
+  if (hit && now - hit.t < CACHE_TTL_MS) {
+    console.log("Cache hit for available tokens");
+    return hit.data;
+  }
+  console.log("Cache miss for available tokens");
   try {
     const coder = new BorshAccountsCoder(idl as any);
     const discriminator = getAccountDiscriminator("BondingCurve");
@@ -298,6 +314,7 @@ export const getAvailableTokens = async ({
       });
     }
 
+    cache.set(cacheKey, { t: now, data: decodedTokens });
     return decodedTokens;
   } catch (error) {
     console.error("Error while fetching available tokens:", error);

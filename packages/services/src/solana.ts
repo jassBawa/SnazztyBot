@@ -1,4 +1,4 @@
-import { Connection, Keypair, PublicKey, clusterApiUrl, sendAndConfirmTransaction, Transaction } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, clusterApiUrl, sendAndConfirmTransaction, Transaction, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, getAccount, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { upsertTelegramUser, getUserByTelegramId } from "@repo/database/user";
 import { encryptSecretKey, decryptSecretKey } from "./encryption";
@@ -37,6 +37,48 @@ export async function getOrCreateUserKeypair(telegramId: bigint): Promise<Keypai
 
   // Generate new keypair (will be saved by ensureDbUserWithWallet)
   return Keypair.generate();
+}
+
+/**
+ * Claim airdrop for a user
+ */
+export async function claimAirdrop(kp: Keypair): Promise<{ signature: string; explorerLink: string }> {
+  try{
+
+    const connection = getConnection();
+    const airdrop = await connection.requestAirdrop(kp.publicKey, 2 * LAMPORTS_PER_SOL);
+    const explorerLink = `${getExplorerBase()}${airdrop}${(process.env.SOLANA_CLUSTER && process.env.SOLANA_CLUSTER !== "mainnet-beta") ? `?cluster=${process.env.SOLANA_CLUSTER}` : ""}`;
+    return { signature: airdrop, explorerLink };
+  } catch (error: any) {
+    console.error("[SOLANA] Error claiming airdrop:", error);
+    const raw = typeof error?.message === 'string' ? error.message : String(error);
+    const pretty = formatAirdropError(raw);
+    throw new Error(pretty);
+  }
+}
+
+function formatAirdropError(message: string): string {
+  const faucetUrl = 'https://faucet.solana.com';
+  const tooMany = message.includes('429') || message.toLowerCase().includes('too many requests');
+  const faucetMention = message.includes('faucet.solana.com');
+
+  if (tooMany || faucetMention) {
+    return [
+      'Airdrop unavailable right now.',
+      'Reason: rate limited or faucet has run out of funds.',
+      `Try again later or use the official faucet: ${faucetUrl}`,
+    ].join('\n');
+  }
+
+  if (message.toLowerCase().includes('airdrop') || message.toLowerCase().includes('requestairdrop')) {
+    return `Failed to claim airdrop: ${stripNewlines(message)}`;
+  }
+
+  return `Failed to claim airdrop: ${stripNewlines(message)}`;
+}
+
+function stripNewlines(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
 }
 
 /**

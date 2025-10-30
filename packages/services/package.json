@@ -7,6 +7,8 @@
     "./encryption": "./src/encryption.ts",
     "./portfolio": "./src/portfolio.ts",
     "./price": "./src/price.ts",
+    "./quote": "./src/quote.ts",
+    "./trade": "./src/trade.ts",
     "./dca-utils": "./src/dca/utils.ts",
     "./token": "./src/token.ts"
   },
