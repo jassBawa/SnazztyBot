@@ -360,16 +360,12 @@ export const buyTokens = async ({
       true
     );
 
-    const relayerWsolAccount = await getOrCreateAssociatedTokenAccount(
-      connection,
-      relayerKeypair,
+    const relayerWsolAccount = await getAssociatedTokenAddress(
       WSOL_MINT,
       relayerKeypair.publicKey
     );
 
-    const relayerTokenAccount = await getOrCreateAssociatedTokenAccount(
-      connection,
-      relayerKeypair,
+    const relayerTokenAccount = await getAssociatedTokenAddress(
       tokenMint,
       relayerKeypair.publicKey,
     );
@@ -385,8 +381,8 @@ export const buyTokens = async ({
         bondingCurve,
         bondingCurveTokenAccount,
         buyerTokenAccount,
-        relayerWsolAccount: relayerWsolAccount.address,
-        relayerTokenAccount: relayerTokenAccount.address,
+        relayerWsolAccount: relayerWsolAccount,
+        relayerTokenAccount: relayerTokenAccount,
         wsolMintAccount: WSOL_MINT,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         relayer: relayerKeypair.publicKey,
