@@ -1,5 +1,5 @@
 import { Telegraf } from "telegraf";
-import { getOrCreateUserKeypair, getBalances, getTokenBalances, getPublicKeyForUser, ensureDbUserWithWallet } from "@repo/services/solana";
+import { getOrCreateUserKeypair, getBalances, getTokenBalances, getPublicKeyForUser, ensureDbUserWithWallet, claimAirdrop } from "@repo/services/solana";
 import { getUserDataFromContext, getTelegramId } from "../utils/telegram";
 import { mainMenuKeyboard, balanceKeyboard, backToMainKeyboard, sendInstructionsKeyboard } from "../utils/keyboards";
 
@@ -74,6 +74,25 @@ export function registerStart(bot: Telegraf) {
       `Built with ❤️ for the Solana ecosystem`,
       { parse_mode: 'Markdown', ...backToMainKeyboard() }
     );
+  });
+
+  bot.action("ACTION_AIRDROP", async (ctx) => {
+    await ctx.answerCbQuery();
+    try {
+      const telegramId = getTelegramId(ctx);
+      const kp = await getOrCreateUserKeypair(telegramId);
+
+      const {explorerLink, signature} = await claimAirdrop(kp);
+
+      await ctx.reply(`✅ Airdrop claimed successfully`, { parse_mode: 'Markdown', ...balanceKeyboard() });
+      await ctx.reply(`🔗 [View Transaction](${explorerLink})\n\n` +
+        `Transaction ID: \`${signature}\``, { parse_mode: 'Markdown' });
+    } catch (err: any) {
+      await ctx.reply(`❌ Failed to claim airdrop: ${err?.message ?? "unknown error"}`);
+    } finally {
+      await ctx.answerCbQuery();
+    }
+
   });
 
   bot.action("ACTION_MAIN_MENU", async (ctx) => {

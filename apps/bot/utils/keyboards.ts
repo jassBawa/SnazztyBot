@@ -23,7 +23,7 @@ export const mainMenuKeyboard = () => {
       Markup.button.callback("📤 Send Tokens", "ACTION_WALLET_SEND"),
       Markup.button.callback("🍌 Token Launchpad", "ACTION_TOKEN_LAUNCHPAD"),
     ],
-
+    [Markup.button.callback("🎁 Airdrop", "ACTION_AIRDROP")],
     [Markup.button.callback("ℹ️ About", "ACTION_ABOUT")],
   ]);
 };

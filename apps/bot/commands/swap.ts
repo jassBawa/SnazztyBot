@@ -2,20 +2,12 @@ import { Telegraf, Markup } from "telegraf";
 import { getOrCreateUserKeypair, getBalances, isValidSolanaAddress, getTokenBalance } from "@repo/services/solana";
 import { getTelegramId } from "../utils/telegram";
 import { backToMainKeyboard, swapOptionsKeyboard } from "../utils/keyboards";
-import { swapSolForToken, swapTokenForSol, previewSolForToken, previewTokenForSol, swapTokenForToken, previewTokenForToken } from "@repo/services/raydium";
+import { swapTokenForToken, previewTokenForToken } from "@repo/services/raydium";
+import { getQuoteBuy, getQuoteSell } from "@repo/services/quote";
+import { executeBuy, executeSell } from "@repo/services/trade";
 
 // Store user swap sessions
-interface SwapSession {
-  action: "buy" | "sell" | "exchange";
-  tokenAddress?: string; // For buy/sell, this is the token. For exchange, this is the input token
-  outputTokenAddress?: string; // For exchange, this is the output token
-  amount?: string;
-  tokenBalance?: number; // Store available token balance
-  outputTokenSymbol?: string; // For display purposes
-  step: "awaiting_token" | "awaiting_output_token" | "awaiting_amount" | "confirming";
-}
-
-const userSessions = new Map<string, SwapSession>();
+import { userSessions } from "./swap.session";
 
 export function registerSwapCommands(bot: Telegraf) {
   // Buy token action
@@ -158,26 +150,7 @@ export function registerSwapCommands(bot: Telegraf) {
     );
   });
 
-  // Cancel command
-  bot.command("cancel", async (ctx) => {
-    const telegramId = getTelegramId(ctx);
-    const sessionKey = telegramId.toString();
-
-    if (userSessions.has(sessionKey)) {
-      userSessions.delete(sessionKey);
-      await ctx.reply(
-        `❌ Swap cancelled.\n\n` +
-          `Use /swap, /buy, or /sell to start a new swap.`,
-        { ...backToMainKeyboard() }
-      );
-    } else {
-      await ctx.reply(
-        `ℹ️ No active swap to cancel.\n\n` +
-          `Use /swap, /buy, or /sell to start a swap.`,
-        { ...backToMainKeyboard() }
-      );
-    }
-  });
+  // Removed /cancel command to prefer inline cancel buttons
 
   // Cancel swap action
   bot.action(/^CANCEL_SWAP_(.+)$/, async (ctx) => {
@@ -205,10 +178,21 @@ export function registerSwapCommands(bot: Telegraf) {
     if (text.startsWith("/")) return next();
 
     try {
+      const cancelKb = () =>
+        Markup.inlineKeyboard([
+          [Markup.button.callback("❌ Cancel", `CANCEL_SWAP_${sessionKey}`)],
+        ]);
       if (session.step === "awaiting_token") {
         // Validate token address using proper Solana validation
         if (!isValidSolanaAddress(text)) {
-          await ctx.reply("❌ Invalid token address. Please send a valid Solana token address.");
+          await ctx.reply(
+            "❌ Invalid token address. Please send a valid Solana token address.",
+            {
+              ...Markup.inlineKeyboard([
+                [Markup.button.callback("❌ Exit", `CANCEL_SWAP_${sessionKey}`)],
+              ]),
+            }
+          );
           return;
         }
 
@@ -241,7 +225,7 @@ export function registerSwapCommands(bot: Telegraf) {
                 `Your balance: ${tokenBalance.amount.toFixed(6)} tokens\n\n` +
                 `Now, how many tokens do you want to sell?\n\n` +
                 `Example: \`0.1\` or \`10\`\n\n`,
-              { parse_mode: "Markdown" }
+              { parse_mode: "Markdown", ...cancelKb() }
             );
             session.step = "awaiting_amount";
           } else {
@@ -253,7 +237,7 @@ export function registerSwapCommands(bot: Telegraf) {
                 `Now, please send the *output token* contract address (the token you want to receive).\n\n` +
                 `Example:\n` +
                 `\`So11111111111111111111111111111111111111112\` (for SOL)\n\n`,
-              { parse_mode: "Markdown" }
+              { parse_mode: "Markdown", ...cancelKb() }
             );
             session.step = "awaiting_output_token";
           }
@@ -264,20 +248,18 @@ export function registerSwapCommands(bot: Telegraf) {
               `Token: \`${text}\`\n\n` +
               `Now, how much SOL do you want to spend?\n\n` +
               `Example: \`0.1\` or \`10\`\n\n`,
-            { parse_mode: "Markdown" }
+            { parse_mode: "Markdown", ...cancelKb() }
           );
           session.step = "awaiting_amount";
         }
 
         userSessions.set(sessionKey, session);
       } else if (session.step === "awaiting_output_token") {
-        // Handle output token for exchange action
         if (!isValidSolanaAddress(text)) {
           await ctx.reply("❌ Invalid token address. Please send a valid Solana token address.");
           return;
         }
 
-        // Validate that output token is different from input token
         if (text === session.tokenAddress) {
           await ctx.reply("❌ Output token must be different from input token. Please send a different token address.");
           return;
@@ -292,7 +274,7 @@ export function registerSwapCommands(bot: Telegraf) {
             `Now, how many INPUT tokens do you want to swap?\n\n` +
             `Available: ${session.tokenBalance?.toFixed(6)} tokens\n\n` +
             `Example: \`0.1\` or \`10\`\n\n`,
-          { parse_mode: "Markdown" }
+          { parse_mode: "Markdown", ...cancelKb() }
         );
 
         session.step = "awaiting_amount";
@@ -301,7 +283,7 @@ export function registerSwapCommands(bot: Telegraf) {
         const amount = parseFloat(text);
 
         if (isNaN(amount) || amount <= 0) {
-          await ctx.reply("❌ Invalid amount. Please send a valid number.");
+          await ctx.reply("❌ Invalid amount. Please send a valid number.", { ...cancelKb() });
           return;
         }
 
@@ -318,7 +300,8 @@ export function registerSwapCommands(bot: Telegraf) {
               `❌ Insufficient SOL balance!\n\n` +
                 `You want to spend: ${amount} SOL\n` +
                 `Your balance: ${solBalance} SOL\n\n` +
-                `Please enter a lower amount.`
+                `Please enter a lower amount.`,
+              { ...cancelKb() }
             );
             return;
           }
@@ -330,7 +313,8 @@ export function registerSwapCommands(bot: Telegraf) {
               `❌ Insufficient token balance!\n\n` +
                 `You want to swap: ${amount} tokens\n` +
                 `Your balance: ${tokenBalance.toFixed(6)} tokens\n\n` +
-                `Please enter a lower amount.`
+                `Please enter a lower amount.`,
+              { ...cancelKb() }
             );
             return;
           }
@@ -357,26 +341,29 @@ export function registerSwapCommands(bot: Telegraf) {
         let priceImpact = "N/A";
         let routeInfo = "";
         try {
+          const fmt = (routeType?: string, poolIds?: string) => {
+            const rt = routeType ? `\nRoute: \`${routeType}\`` : "";
+            const pools = poolIds ? `\nPools: \`${poolIds.substring(0, 40)}...\`` : "";
+            return `${rt}${pools}`;
+          };
           if (session.action === "buy") {
-            const preview = await previewSolForToken({
-              tokenMint: session.tokenAddress!,
-              solAmount: amount,
-            });
-            expectedOutput = `~${preview.outputAmount} Token`;
-            priceImpact = `${preview.priceImpact}%`;
-            if (preview.routeType && preview.poolIds) {
-              routeInfo = `\nRoute: ${preview.routeType}\nPools: ${preview.poolIds.substring(0, 40)}...`;
-            }
+            const loadingMsg = await ctx.reply("⏳ Finding the best route... this may take a few seconds.");
+            const quote = await getQuoteBuy({ mint: session.tokenAddress!, solAmount: amount });
+            try {
+              await ctx.telegram.editMessageText(ctx.chat!.id, loadingMsg.message_id, undefined, "✅ Best route found");
+            } catch {}
+            expectedOutput = `~${quote.outputAmount} Token`;
+            priceImpact = quote.priceImpact ? `${quote.priceImpact}%` : "-";
+            routeInfo = fmt(quote.routeType, quote.poolIds);
           } else if (session.action === "sell") {
-            const preview = await previewTokenForSol({
-              tokenMint: session.tokenAddress!,
-              tokenAmount: amount,
-            });
-            expectedOutput = `~${preview.outputAmount} SOL`;
-            priceImpact = `${preview.priceImpact}%`;
-            if (preview.routeType && preview.poolIds) {
-              routeInfo = `\nRoute: ${preview.routeType}\nPools: ${preview.poolIds.substring(0, 40)}...`;
-            }
+            const loadingMsg = await ctx.reply("⏳ Finding the best route... this may take a few seconds.");
+            const quote = await getQuoteSell({ mint: session.tokenAddress!, tokenAmount: amount });
+            try {
+              await ctx.telegram.editMessageText(ctx.chat!.id, loadingMsg.message_id, undefined, "✅ Best route found");
+            } catch {}
+            expectedOutput = `~${quote.outputAmount} SOL`;
+            priceImpact = quote.priceImpact ? `${quote.priceImpact}%` : "-";
+            routeInfo = fmt(quote.routeType, quote.poolIds);
           } else {
             // Exchange action
             const preview = await previewTokenForToken({
@@ -386,9 +373,7 @@ export function registerSwapCommands(bot: Telegraf) {
             });
             expectedOutput = `~${preview.outputAmount} Token`;
             priceImpact = `${preview.priceImpact}%`;
-            if (preview.routeType && preview.poolIds) {
-              routeInfo = `\nRoute: ${preview.routeType}\nPools: ${preview.poolIds.substring(0, 40)}...`;
-            }
+            routeInfo = fmt(preview.routeType, preview.poolIds);
           }
         } catch (error: any) {
           expectedOutput = "Unable to calculate";
@@ -453,23 +438,21 @@ export function registerSwapCommands(bot: Telegraf) {
       let result;
 
       if (session.action === "buy") {
-        console.log("[SWAP] Executing BUY: SOL -> Token");
-        // Buy token with SOL
-        result = await swapSolForToken({
+        console.log("[SWAP] Executing BUY (router)");
+        result = await executeBuy({
           userKeypair,
-          tokenMint: session.tokenAddress!,
+          mint: session.tokenAddress!,
           solAmount: amount,
-          slippage: 0.01, // 1% slippage (decimal format)
+          slippage: 0.01,
         });
         console.log("[SWAP] BUY result:", result);
       } else if (session.action === "sell") {
-        console.log("[SWAP] Executing SELL: Token -> SOL");
-        // Sell token for SOL
-        result = await swapTokenForSol({
+        console.log("[SWAP] Executing SELL (router)");
+        result = await executeSell({
           userKeypair,
-          tokenMint: session.tokenAddress!,
+          mint: session.tokenAddress!,
           tokenAmount: amount,
-          slippage: 0.01, // 1% slippage (decimal format)
+          slippage: 0.01,
         });
         console.log("[SWAP] SELL result:", result);
       } else {

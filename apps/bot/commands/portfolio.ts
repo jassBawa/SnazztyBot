@@ -29,13 +29,13 @@ export function registerPortfolio(bot: Telegraf) {
       message += `💰 *Total Value*\n`;
       message += `${portfolio.totalPortfolioSol.toFixed(4)} SOL`;
       if (portfolio.solPriceUsd !== null) {
-        message += ` ≈ $${formatUSD(portfolio.totalPortfolioUsd)}`;
+        message += ` ≈ ${formatUSD(portfolio.totalPortfolioUsd)}`;
       }
       message += `\n\n`;
 
       // SOL Price reference
       if (portfolio.solPriceUsd !== null) {
-        message += `💵 SOL Price: $${formatUSD(portfolio.solPriceUsd)}\n\n`;
+        message += `💵 SOL Price: ${formatUSD(portfolio.solPriceUsd)}\n\n`;
       }
 
       // Breakdown section
@@ -46,7 +46,7 @@ export function registerPortfolio(bot: Telegraf) {
       message += `💎 SOL Balance\n`;
       message += `   ${portfolio.solBalance.toFixed(4)} SOL`;
       if (portfolio.solPriceUsd !== null) {
-        message += ` ($${formatUSD(portfolio.solValueUsd)})`;
+        message += ` (${formatUSD(portfolio.solValueUsd)})`;
       }
       message += `\n\n`;
 
@@ -58,7 +58,7 @@ export function registerPortfolio(bot: Telegraf) {
         message += `🪙 Token Holdings (${portfolio.tokens.length})\n`;
         message += `   Total: ${portfolio.totalTokenValueSol.toFixed(4)} SOL`;
         if (portfolio.solPriceUsd !== null) {
-          message += ` ($${formatUSD(portfolio.totalTokenValueUsd)})`;
+          message += ` (${formatUSD(portfolio.totalTokenValueUsd)})`;
         }
         message += `\n\n`;
 
@@ -70,7 +70,7 @@ export function registerPortfolio(bot: Telegraf) {
           message += `      Value: ${token.valueInSol.toFixed(4)} SOL`;
 
           if (portfolio.solPriceUsd !== null && token.valueInUsd > 0) {
-            message += ` ($${formatUSD(token.valueInUsd)})`;
+            message += ` (${formatUSD(token.valueInUsd)})`;
           }
           message += `\n`;
 
@@ -121,13 +121,13 @@ export function registerPortfolio(bot: Telegraf) {
       message += `💰 *Total Value*\n`;
       message += `${portfolio.totalPortfolioSol.toFixed(4)} SOL`;
       if (portfolio.solPriceUsd !== null) {
-        message += ` ≈ $${formatUSD(portfolio.totalPortfolioUsd)}`;
+        message += ` ≈ ${formatUSD(portfolio.totalPortfolioUsd)}`;
       }
       message += `\n\n`;
 
       // SOL Price reference
       if (portfolio.solPriceUsd !== null) {
-        message += `💵 SOL Price: $${formatUSD(portfolio.solPriceUsd)}\n\n`;
+        message += `💵 SOL Price: ${formatUSD(portfolio.solPriceUsd)}\n\n`;
       }
 
       // Breakdown section
@@ -138,7 +138,7 @@ export function registerPortfolio(bot: Telegraf) {
       message += `💎 SOL Balance\n`;
       message += `   ${portfolio.solBalance.toFixed(4)} SOL`;
       if (portfolio.solPriceUsd !== null) {
-        message += ` ($${formatUSD(portfolio.solValueUsd)})`;
+        message += ` (${formatUSD(portfolio.solValueUsd)})`;
       }
       message += `\n\n`;
 
@@ -150,7 +150,7 @@ export function registerPortfolio(bot: Telegraf) {
         message += `🪙 Token Holdings (${portfolio.tokens.length})\n`;
         message += `   Total: ${portfolio.totalTokenValueSol.toFixed(4)} SOL`;
         if (portfolio.solPriceUsd !== null) {
-          message += ` ($${formatUSD(portfolio.totalTokenValueUsd)})`;
+          message += ` (${formatUSD(portfolio.totalTokenValueUsd)})`;
         }
         message += `\n\n`;
 
@@ -162,7 +162,7 @@ export function registerPortfolio(bot: Telegraf) {
           message += `      Value: ${token.valueInSol.toFixed(4)} SOL`;
 
           if (portfolio.solPriceUsd !== null && token.valueInUsd > 0) {
-            message += ` ($${formatUSD(token.valueInUsd)})`;
+            message += ` (${formatUSD(token.valueInUsd)})`;
           }
           message += `\n`;
 

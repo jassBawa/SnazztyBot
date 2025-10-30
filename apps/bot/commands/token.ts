@@ -23,6 +23,7 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { getOrCreateUserKeypair } from "@repo/services/solana";
 import { getTelegramId } from "utils/telegram";
 import { BN } from "bn.js";
+import { clearSwapSession, hasSwapSession } from "./swap.session";
 
 export const registerTokenCommands = async (bot: Telegraf) => {
   const connection = new Connection(process.env.SOLANA_RPC_URL!);
@@ -47,6 +48,11 @@ export const registerTokenCommands = async (bot: Telegraf) => {
     await ctx.answerCbQuery();
 
     const userId = ctx.from.id;
+    // Ensure no active swap session keeps listening
+    const sessionKey = String(userId);
+    if (hasSwapSession(sessionKey)) {
+      clearSwapSession(sessionKey);
+    }
     createSession(userId);
 
     await ctx.reply(
@@ -561,7 +567,7 @@ How much SOL do you want to spend?
       const buyerKeypair = await getOrCreateUserKeypair(telegramId);
       const programId = new PublicKey(process.env.PROGRAM_ID!);
 
-      // Fetch token info
+      // TODO: Fetch token info (FIX THIS)
       const availableTokens = await getAvailableTokens({
         connection,
         programId,
