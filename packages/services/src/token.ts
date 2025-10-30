@@ -317,6 +317,7 @@ export const buyTokens = async ({
     const wallet = new Wallet(buyerKeypair);
     const provider = new AnchorProvider(connection, wallet);
     const program = new Program(idl, provider);
+    const relayerKeypair = keyPairFromString(process.env.RELAYER_PRIVATE_KEY!);
 
     const solAmount = new BN_VALUE(amount).mul(new BN(LAMPORTS_PER_SOL));
 
@@ -342,16 +343,18 @@ export const buyTokens = async ({
       true
     );
 
-    const wsolTempTokenAccount = await getAssociatedTokenAddress(
+    const relayerWsolAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      relayerKeypair,
       WSOL_MINT,
-      bondingCurve,
-      true
+      relayerKeypair.publicKey
     );
 
-    const liquidityTokenAccount = await getAssociatedTokenAddress(
+    const relayerTokenAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      relayerKeypair,
       tokenMint,
-      bondingCurve,
-      true
+      relayerKeypair.publicKey,
     );
 
     const tx = new Transaction();
@@ -365,10 +368,12 @@ export const buyTokens = async ({
         bondingCurve,
         bondingCurveTokenAccount,
         buyerTokenAccount,
-        wsolTempTokenAccount,
-        liquidityTokenAccount,
+        relayerWsolAccount: relayerWsolAccount.address,
+        relayerTokenAccount: relayerTokenAccount.address,
         wsolMintAccount: WSOL_MINT,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        relayer: relayerKeypair.publicKey,
+        systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         rent: SYSVAR_RENT_PUBKEY,
       })
@@ -645,5 +650,32 @@ export const getTokenHolders = async (
   } catch (error) {
     console.error("Error fetching token holders:", error);
     return 0;
+  }
+};
+
+export const keyPairFromString = (keyStr: string): Keypair => {
+  try {
+    const cleaned = keyStr.trim();
+
+    if (cleaned.startsWith("[")) {
+      const secretKey = Uint8Array.from(JSON.parse(cleaned));
+      if (secretKey.length !== 64) {
+        throw new Error(
+          `Invalid secret key length: ${secretKey.length}. Expected 64 bytes.`
+        );
+      }
+      return Keypair.fromSecretKey(secretKey);
+    }
+
+    const secret = bs58.decode(cleaned);
+    if (secret.length !== 64) {
+      throw new Error(
+        `Invalid secret key length: ${secret.length}. Expected 64 bytes.`
+      );
+    }
+    return Keypair.fromSecretKey(secret);
+  } catch (error) {
+    console.log("Error while decoding the keypair: ", error);
+    throw new Error("Failed to decode the keypair");
   }
 };
