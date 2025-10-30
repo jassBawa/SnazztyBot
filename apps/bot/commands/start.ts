@@ -13,7 +13,7 @@ export function registerStart(bot: Telegraf) {
     const pubkey = await getPublicKeyForUser(userData.telegramId);
 
     ctx.reply(
-      `🚀 *Welcome to SnazztyBot!*\n\nYour Solana wallet is ready:\n\n` +
+      `🚀 *Welcome to BlowUpBot!*\n\nYour Solana wallet is ready:\n\n` +
       `📍 Address:\n\`${pubkey.toBase58()}\`\n\n` +
       `Use the buttons below to get started:`,
       { parse_mode: 'Markdown', ...mainMenuKeyboard() }
@@ -64,7 +64,7 @@ export function registerStart(bot: Telegraf) {
 
   bot.action("ACTION_ABOUT", async (ctx) => {
     await ctx.reply(
-      `ℹ️ *About SnazztyBot*\n\n` +
+      `ℹ️ *About BlowUpBot*\n\n` +
       `I am your Solana wallet assistant! 🤖\n\n` +
       `✨ *Features:*\n` +
       `• Create & manage Solana wallets\n` +

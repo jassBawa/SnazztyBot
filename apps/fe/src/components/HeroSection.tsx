@@ -45,7 +45,7 @@ export function HeroSection() {
           </a>
           
           <a 
-            href="https://github.com/yourusername/snazztybot" 
+            href="https://github.com/yourusername/BlowUpBot" 
             target="_blank" 
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#22d3ee]/30 bg-[#22d3ee]/10 px-8 py-4 text-base font-semibold text-[#22d3ee] backdrop-blur-sm transition-all hover:border-[#22d3ee]/50 hover:bg-[#22d3ee]/20"

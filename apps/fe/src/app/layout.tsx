@@ -13,17 +13,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SnazztyBot - Solana DCA Trading & Token Launch Bot",
+  title: "BlowUpBot - Solana DCA Trading & Token Launch Bot",
   description: "Automate Dollar-Cost Averaging strategies and launch tokens on Solana with our Telegram bot. Test risk-free on devnet. Trade 24/7 and launch tokens with bonding curves like pump.fun - all from Telegram.",
   keywords: ["Solana bot", "Telegram bot", "DCA trading", "token launch", "cryptocurrency trading", "automated trading", "bonding curve", "pump.fun alternative", "trading bot", "crypto automation"],
   openGraph: {
-    title: "SnazztyBot - Solana DCA Trading & Token Launch Bot",
+    title: "BlowUpBot - Solana DCA Trading & Token Launch Bot",
     description: "Automate Dollar-Cost Averaging strategies and launch tokens on Solana. Test risk-free on devnet with our Telegram bot.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "SnazztyBot - Solana DCA Trading & Token Launch Bot",
+    title: "BlowUpBot - Solana DCA Trading & Token Launch Bot",
     description: "Automate DCA strategies and launch tokens on Solana. Trade 24/7 and launch tokens with bonding curves - all from Telegram.",
   },
 };
