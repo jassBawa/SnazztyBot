@@ -8,7 +8,8 @@ import {
   TxVersion,
 } from "@raydium-io/raydium-sdk-v2";
 import { initSdk, owner } from "../config";
-import { AnchorProvider, BN, Program, Wallet } from "@coral-xyz/anchor";
+import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
+import BN from "bn.js";
 
 export interface CreatePoolEvent {
   mintA: string;

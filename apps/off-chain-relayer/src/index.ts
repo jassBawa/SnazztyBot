@@ -1,18 +1,17 @@
 import * as anchor from "@coral-xyz/anchor";
+// import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet.js";
+import { Wallet } from "@coral-xyz/anchor";
+import { createSyncNativeInstruction } from "@solana/spl-token";
 import {
   Connection,
-  LogsFilter,
   PublicKey,
   Transaction,
-  clusterApiUrl,
+  clusterApiUrl
 } from "@solana/web3.js";
 import dotenv from "dotenv";
+import { owner } from "./config";
 import { createPoolHandler } from "./handlers/createPoolHandler";
 import idl from "./idl/program.json";
-import * as bs58 from "bs58";
-import { createSyncNativeInstruction } from "@solana/spl-token";
-import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
-import { owner } from "./config";
 
 dotenv.config();
 
@@ -26,7 +25,7 @@ if (!PROGRAM_ID) {
 }
 
 const connection = new Connection(RPC_URL, "confirmed");
-const wallet = new NodeWallet(owner);
+const wallet = new Wallet(owner);
 const provider = new anchor.AnchorProvider(connection, wallet, {
   commitment: "confirmed",
 });
