@@ -213,9 +213,11 @@ export const registerTokenCommands = async (bot: Telegraf) => {
         sellSession.step = "CONFIRMING_SELL";
 
         // Fetch token info for confirmation
+        const telegramId = getTelegramId(ctx);
+        const keypair = await getOrCreateUserKeypair(telegramId);
         const availableTokens = await getAvailableTokens({
           connection,
-          programId,
+          keypair,
         });
         const token = availableTokens.find(
           (t) => t.tokenMint === sellSession.mintAddress
@@ -289,7 +291,6 @@ export const registerTokenCommands = async (bot: Telegraf) => {
         uri,
         connection,
         payerKeypair,
-        programId,
       });
 
       if (result.success) {
@@ -337,8 +338,8 @@ export const registerTokenCommands = async (bot: Telegraf) => {
 
     const userTokens = await getMyTokens({
       connection,
-      programId,
       creatorPubkey: payerKeypair.publicKey,
+      payerKeypair,
     });
 
     if (userTokens.length === 0) {
@@ -375,12 +376,13 @@ export const registerTokenCommands = async (bot: Telegraf) => {
   // Action: View all available tokens on bonding curve
   bot.action("ACTION_TOKEN_LIST", async (ctx) => {
     await ctx.answerCbQuery();
+    const telegramId = getTelegramId(ctx);
+    const keypair = await getOrCreateUserKeypair(telegramId);
 
     try {
-      const programId = new PublicKey(process.env.PROGRAM_ID!);
       const availableTokens = await getAvailableTokens({
         connection,
-        programId,
+        keypair,
       });
 
       if (availableTokens.length === 0) {
@@ -446,11 +448,14 @@ export const registerTokenCommands = async (bot: Telegraf) => {
 
     const tokenMint = ctx.match[1];
 
+    const telegramId = getTelegramId(ctx);
+    const keypair = await getOrCreateUserKeypair(telegramId);
+
     try {
       const programId = new PublicKey(process.env.PROGRAM_ID!);
       const availableTokens = await getAvailableTokens({
         connection,
-        programId,
+        keypair,
       });
 
       const token = availableTokens.find((t) => t.tokenMint === tokenMint);
@@ -499,12 +504,13 @@ ${token.graduated ? "🎓 *Status:* Graduated" : "📈 *Status:* Active"}
     const tokenMint = ctx.match[1];
 
     try {
-      const programId = new PublicKey(process.env.PROGRAM_ID!);
+      const telegramId = getTelegramId(ctx);
+      const keypair = await getOrCreateUserKeypair(telegramId);
 
       // Fetch token info
       const availableTokens = await getAvailableTokens({
         connection,
-        programId,
+        keypair,
       });
       const token = availableTokens.find((t) => t.tokenMint === tokenMint);
 
@@ -564,13 +570,12 @@ How much SOL do you want to spend?
 
     try {
       const telegramId = getTelegramId(ctx);
-      const buyerKeypair = await getOrCreateUserKeypair(telegramId);
-      const programId = new PublicKey(process.env.PROGRAM_ID!);
+      const keypair = await getOrCreateUserKeypair(telegramId);
 
       // TODO: Fetch token info (FIX THIS)
       const availableTokens = await getAvailableTokens({
         connection,
-        programId,
+        keypair,
       });
       const token = availableTokens.find((t) => t.tokenMint === tokenMint);
 
@@ -580,7 +585,7 @@ How much SOL do you want to spend?
       }
 
       // Check balance
-      const balance = await connection.getBalance(buyerKeypair.publicKey);
+      const balance = await connection.getBalance(keypair.publicKey);
       const balanceSOL = balance / 1e9;
 
       if (balanceSOL < solAmount) {
@@ -640,7 +645,7 @@ Proceed with purchase?
       // Fetch token info
       const availableTokens = await getAvailableTokens({
         connection,
-        programId,
+        keypair: buyerKeypair,
       });
       const token = availableTokens.find((t) => t.tokenMint === tokenMint);
 
@@ -656,7 +661,6 @@ Proceed with purchase?
       // Execute the buy
       const result = await buyTokens({
         connection,
-        programId,
         buyerKeypair,
         tokenMint: new PublicKey(tokenMint),
         amount: solAmount, // Multiply inside BN
@@ -751,9 +755,11 @@ Proceed with purchase?
 
     try {
       // Fetch token info
+      const telegramId = getTelegramId(ctx);
+      const keypair = await getOrCreateUserKeypair(telegramId);
       const availableTokens = await getAvailableTokens({
         connection,
-        programId,
+        keypair,
       });
       const token = availableTokens.find((t) => t.tokenMint === mintAddress);
 
@@ -811,7 +817,7 @@ Proceed with purchase?
       // Fetch token info
       const availableTokens = await getAvailableTokens({
         connection,
-        programId,
+        keypair: sellerKeypair,
       });
       const token = availableTokens.find((t) => t.tokenMint === mintAddress);
 
@@ -827,7 +833,6 @@ Proceed with purchase?
 
       const result = await sellTokens({
         connection,
-        programId,
         sellerKeypair,
         tokenMint: new PublicKey(mintAddress),
         tokensIn: new BN(tokenAmount * 1e6),
