@@ -36,7 +36,7 @@ services:
     volumes:
       - ./packages:/app/packages
     command: >-
-      sh -c "pnpm --dir packages/database exec prisma migrate deploy && pnpm --dir packages/database exec tsx src/seed.ts"
+       sh -c "pnpm --dir packages/database exec prisma migrate deploy && pnpm --dir packages/database exec prisma generate && pnpm --dir packages/database exec tsx src/seed.ts"
     networks:
       - blowupbot-network
 
