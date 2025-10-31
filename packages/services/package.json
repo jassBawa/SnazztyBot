@@ -1,6 +1,8 @@
 {
   "name": "@repo/services",
   "version": "1.0.0",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
     "./solana": "./src/solana.ts",
     "./raydium": "./src/raydium.ts",
