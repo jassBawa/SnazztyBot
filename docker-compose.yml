@@ -2,7 +2,7 @@ services:
   # PostgreSQL Database
   db:
     image: postgres:15
-    container_name: snazztybot_db
+    container_name: blowupbot_db
     restart: always
     environment:
       POSTGRES_USER: postgres
@@ -18,14 +18,14 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - snazztybot-network
+      - blowupbot-network
 
   # Prisma migrate + seed (one-off job)
   migrate:
     build:
       context: .
       dockerfile: apps/scheduler/Dockerfile
-    container_name: snazztybot_migrate
+    container_name: blowupbot_migrate
     restart: "no"
     depends_on:
       db:
@@ -38,14 +38,14 @@ services:
     command: >-
       sh -c "pnpm --dir packages/database exec prisma migrate deploy && pnpm --dir packages/database exec tsx src/seed.ts"
     networks:
-      - snazztybot-network
+      - blowupbot-network
 
   # Telegram Bot Service
   bot:
     build:
       context: .
       dockerfile: apps/bot/Dockerfile
-    container_name: snazztybot_bot
+    container_name: blowupbot_bot
     restart: always
     depends_on:
       db:
@@ -68,14 +68,14 @@ services:
       - /app/packages/database/node_modules
       - /app/packages/services/node_modules
     networks:
-      - snazztybot-network
+      - blowupbot-network
 
   # Scheduler Service (DCA Executor)
   scheduler:
     build:
       context: .
       dockerfile: apps/scheduler/Dockerfile
-    container_name: snazztybot_scheduler
+    container_name: blowupbot_scheduler
     restart: always
     depends_on:
       db:
@@ -97,14 +97,14 @@ services:
       - /app/packages/database/node_modules
       - /app/packages/services/node_modules
     networks:
-      - snazztybot-network
+      - blowupbot-network
 
   # Off-chain Relayer Service
   offchain-relayer:
     build:
       context: .
       dockerfile: apps/off-chain-relayer/Dockerfile
-    container_name: snazztybot_relayer
+    container_name: blowupbot_relayer
     restart: always
     environment:
       NODE_ENV: production
@@ -114,11 +114,11 @@ services:
     volumes:
       - ./apps/off-chain-relayer:/app/apps/off-chain-relayer
     networks:
-      - snazztybot-network
+      - blowupbot-network
 
 volumes:
   pgdata:
 
 networks:
-  snazztybot-network:
+  blowupbot-network:
     driver: bridge

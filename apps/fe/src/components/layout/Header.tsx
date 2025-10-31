@@ -6,10 +6,10 @@ export function Header() {
       <div className="container mx-auto flex h-16 items-center justify-between px-6">
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5">
-            <span className="text-lg font-bold text-white">S</span>
+            <span className="text-lg font-bold text-white">B</span>
           </div>
           <span className="text-xl font-semibold tracking-tight">
-            <span className="text-white">Snazzty</span>
+            <span className="text-white">BlowUp</span>
             <span className="text-gray-500">Bot</span>
           </span>
         </div>
