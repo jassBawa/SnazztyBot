@@ -20,6 +20,26 @@ services:
     networks:
       - snazztybot-network
 
+  # Prisma migrate + seed (one-off job)
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/scheduler/Dockerfile
+    container_name: snazztybot_migrate
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/telegram_bot
+    volumes:
+      - ./packages:/app/packages
+    command: >-
+      sh -c "pnpm --dir packages/database exec prisma migrate deploy && pnpm --dir packages/database exec tsx src/seed.ts"
+    networks:
+      - snazztybot-network
+
   # Telegram Bot Service
   bot:
     build:
@@ -30,6 +50,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://postgres:postgres@db:5432/telegram_bot
@@ -58,6 +80,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://postgres:postgres@db:5432/telegram_bot
