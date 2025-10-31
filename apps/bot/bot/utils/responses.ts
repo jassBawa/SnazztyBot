@@ -1,6 +1,6 @@
 import { Context } from "telegraf";
 import { CallbackQuery, Update, Message } from "telegraf/types";
-import allCommands from "./allCommands";
+import allCommands from "./allCommands.js";
 
 export const viewAllCommandsResponse = (
   ctx:

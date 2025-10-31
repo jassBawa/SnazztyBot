@@ -2,7 +2,7 @@ import { getTelegramId } from "../../utils/telegram";
 import { getAllActiveTokenPairs, getUserByTelegramId } from "@repo/database";
 import { getUserDcaStrategies } from "@repo/database/dca";
 import { backToMainKeyboard } from "../../utils/keyboards";
-import { getSessionKey, setSession, clearSession } from "./session";
+import { getSessionKey, setSession, clearSession } from "./session.js";
 import {
   buildTokenPairSelection,
   buildStrategyListMessage,
@@ -11,9 +11,9 @@ import {
   buildPortfolioStatsKeyboard,
   buildHistorySelectorMessage,
   buildHistorySelectorKeyboard
-} from "./messages";
+} from "./messages.js";
 import { getUserExecutions } from "@repo/database/dca";
-import { calculatePortfolioAnalytics } from "./analytics";
+import { calculatePortfolioAnalytics } from "./analytics.js";
 
 export async function setupDcaFlow(ctx: any): Promise<void> {
   try {

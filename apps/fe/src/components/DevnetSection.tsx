@@ -22,7 +22,7 @@ export function DevnetSection() {
               
               <div className="flex flex-col gap-3 sm:flex-row">
                 <a 
-                  href="https://t.me/your_bot_username" 
+                  href="https://t.me/BlowUpBot" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#22d3ee] px-6 py-3 text-base font-semibold text-white transition-all hover:bg-[#06b6d4]"
@@ -46,16 +46,41 @@ export function DevnetSection() {
               </div>
             </div>
 
-            {/* Right: Bot Screenshot */}
+            {/* Right: Phone Screenshot */}
             <div className="relative hidden lg:flex lg:items-center lg:justify-center">
               <div className="relative py-8 pr-8">
-                <img 
-                  src="/images/tg-bot-image.png" 
-                  alt="Telegram Bot Interface" 
-                  className="h-[500px] w-auto rounded-2xl border border-white/10 shadow-2xl"
-                />
-                {/* Glow effect behind image */}
-                <div className="absolute inset-0 -z-10 bg-cyan-400/20 blur-3xl" />
+                <div className="relative">
+                  {/* Phone mockup container */}
+                  <div className="relative mx-auto w-[320px]">
+                    {/* Phone frame shadow */}
+                    <div className="absolute -inset-4 rounded-[2.5rem] bg-gradient-to-br from-cyan-500/20 via-transparent to-transparent blur-2xl" />
+                    
+                    {/* Phone outer frame */}
+                    <div className="relative rounded-[2.5rem] border-[12px] border-gray-800/90 bg-gray-800 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+                      {/* Notch */}
+                      <div className="absolute left-1/2 top-0 z-10 h-7 w-36 -translate-x-1/2 rounded-b-2xl bg-gray-800" />
+                      
+                      {/* Screen container */}
+                      <div className="relative overflow-hidden rounded-[1.75rem] bg-black">
+                        <img 
+                          src="/images/tg-bot.png" 
+                          alt="Telegram Bot Interface on Phone" 
+                          className="block h-auto w-full object-cover"
+                        />
+                        {/* Screen reflection gradient */}
+                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/5" />
+                      </div>
+                      
+                      {/* Home indicator */}
+                      <div className="absolute bottom-3 left-1/2 h-1 w-36 -translate-x-1/2 rounded-full bg-white/40" />
+                    </div>
+                    
+                    {/* Glow effects */}
+                    <div className="absolute -inset-6 -z-10 bg-cyan-400/15 blur-3xl" />
+                    <div className="absolute -left-8 top-1/2 -z-10 h-32 w-32 -translate-y-1/2 rounded-full bg-cyan-500/10 blur-2xl" />
+                    <div className="absolute -right-8 bottom-1/4 -z-10 h-24 w-24 rounded-full bg-cyan-400/10 blur-xl" />
+                  </div>
+                </div>
               </div>
             </div>
           </div>

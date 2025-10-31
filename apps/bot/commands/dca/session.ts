@@ -4,7 +4,7 @@
 
 import { Context } from "telegraf";
 import { getTelegramId } from "../../utils/telegram";
-import { DcaSession } from "./types";
+import { DcaSession } from "./types.js";
 
 /**
  * In-memory storage for active DCA setup sessions

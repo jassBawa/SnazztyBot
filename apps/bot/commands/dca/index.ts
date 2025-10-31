@@ -1,8 +1,8 @@
 import { Telegraf } from "telegraf";
-import { setupDcaFlow, showDcaList, showPortfolioStats, showHistorySelector } from "./flows";
-import { registerSetupHandlers } from "./handlers/setup";
-import { registerManagementHandlers } from "./handlers/management";
-import { registerAnalyticsHandlers } from "./handlers/analytics";
+import { setupDcaFlow, showDcaList, showPortfolioStats, showHistorySelector } from "./flows.js";
+import { registerSetupHandlers } from "./handlers/setup.js";
+import { registerManagementHandlers } from "./handlers/management.js";
+import { registerAnalyticsHandlers } from "./handlers/analytics.js";
 
 /**
  * Register all DCA-related commands and action handlers

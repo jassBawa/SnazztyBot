@@ -1,15 +1,15 @@
 import { Telegraf } from "telegraf";
-import { registerStart } from "./start";
-import { registerAbout } from "./about";
-import { registerWalletCreate } from "./wallet.create";
-import { registerWalletBalance } from "./wallet.balance";
-import { registerWalletSend } from "./wallet.send";
-import { registerSwapCommands } from "./swap";
-import { registerQuickCommands } from "./quick";
-import { registerDcaCommands } from "./dca";
-import { registerPriceCommand } from "./price";
-import { registerPortfolio } from "./portfolio";
-import { registerTokenCommands } from "./token";
+import { registerStart } from "./start.js";
+import { registerAbout } from "./about.js";
+import { registerWalletCreate } from "./wallet.create.js";
+import { registerWalletBalance } from "./wallet.balance.js";
+import { registerWalletSend } from "./wallet.send.js";
+import { registerSwapCommands } from "./swap.js";
+import { registerQuickCommands } from "./quick.js";
+import { registerDcaCommands } from "./dca/index.js";
+import { registerPriceCommand } from "./price.js";
+import { registerPortfolio } from "./portfolio.js";
+import { registerTokenCommands } from "./token.js";
 
 export function registerCommands(bot: Telegraf) {
   registerStart(bot);

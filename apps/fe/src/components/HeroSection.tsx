@@ -33,7 +33,7 @@ export function HeroSection() {
         {/* CTA Buttons */}
         <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
           <a 
-            href="https://t.me/your_bot_username" 
+            href="https://t.me/BlowUpBot" 
             target="_blank" 
             rel="noopener noreferrer"
             className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-lg bg-[#22d3ee] px-8 py-4 text-base font-semibold text-white transition-all hover:scale-105 hover:bg-[#06b6d4] hover:shadow-2xl hover:shadow-[#22d3ee]/20"
@@ -45,7 +45,7 @@ export function HeroSection() {
           </a>
           
           <a 
-            href="https://github.com/yourusername/snazztybot" 
+            href="https://github.com/jassBawa/BlowUpBot/" 
             target="_blank" 
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#22d3ee]/30 bg-[#22d3ee]/10 px-8 py-4 text-base font-semibold text-[#22d3ee] backdrop-blur-sm transition-all hover:border-[#22d3ee]/50 hover:bg-[#22d3ee]/20"
@@ -121,7 +121,7 @@ export function HeroSection() {
             <div className="text-sm text-gray-500">Automated Trading</div>
           </div>
           <div className="text-center">
-            <div className="mb-2 text-3xl font-bold text-white">0.3%</div>
+            <div className="mb-2 text-3xl font-bold text-white">0%</div>
             <div className="text-sm text-gray-500">Platform Fee</div>
           </div>
           <div className="text-center">

@@ -41,7 +41,6 @@ interface UserToken {
 }
 interface BuyTokensParams {
   connection: Connection;
-  programId: PublicKey;
   buyerKeypair: Keypair;
   tokenMint: PublicKey;
   amount: number;
@@ -50,7 +49,6 @@ interface BuyTokensParams {
 
 interface SellTokensParams {
   connection: Connection;
-  programId: PublicKey;
   sellerKeypair: Keypair;
   tokenMint: PublicKey;
   tokensIn: BN;
@@ -63,7 +61,6 @@ interface CreateToken {
   symbol: string;
   connection: Connection;
   payerKeypair: Keypair;
-  programId: PublicKey;
 }
 const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
   "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
@@ -81,10 +78,12 @@ export const createToken = async ({
   symbol,
   connection,
   payerKeypair,
-  programId,
 }: CreateToken) => {
   try {
     const wallet = new Wallet(payerKeypair);
+    const provider = new AnchorProvider(connection, wallet);
+    const program = new Program(idl, provider);
+    const programId = program.programId;
     const [globalConfig] = PublicKey.findProgramAddressSync(
       [Buffer.from("global-config")],
       programId
@@ -115,8 +114,16 @@ export const createToken = async ({
       TOKEN_METADATA_PROGRAM_ID
     );
 
-    const provider = new AnchorProvider(connection, wallet);
-    const program = new Program(idl, provider);
+    console.log(">>> program.programId:", program.programId.toBase58());
+    console.log(
+      ">>> programId param (as string):",
+      programId.toBase58 ? programId.toBase58() : programId
+    );
+    console.log(
+      ">>> derived globalConfig PDA (using programId param):",
+      globalConfig.toBase58()
+    );
+
     const tx = await program.methods
       .createToken(name, symbol, uri)
       .accounts({
@@ -153,14 +160,18 @@ export const createToken = async ({
 
 export const getMyTokens = async ({
   connection,
-  programId,
   creatorPubkey,
+  payerKeypair,
 }: {
   connection: Connection;
-  programId: PublicKey;
   creatorPubkey: PublicKey;
+  payerKeypair: Keypair;
 }): Promise<UserToken[]> => {
   try {
+    const wallet = new Wallet(payerKeypair);
+    const provider = new AnchorProvider(connection, wallet);
+    const program = new Program(idl, provider);
+    const programId = program.programId;
     const coder = new BorshAccountsCoder(idl as any);
     const discriminator = getAccountDiscriminator("BondingCurve");
     const discriminatorBase = bs58.encode(discriminator);
@@ -231,12 +242,16 @@ export const getMyTokens = async ({
 
 export const getAvailableTokens = async ({
   connection,
-  programId,
+  keypair,
 }: {
   connection: Connection;
-  programId: PublicKey;
+  keypair: Keypair;
 }): Promise<UserToken[]> => {
   // TODO: find good approach for caching
+  const wallet = new Wallet(keypair);
+  const provider = new AnchorProvider(connection, wallet);
+  const program = new Program(idl, provider);
+  const programId = program.programId;
   const CACHE_TTL_MS = Number(process.env.TOKENS_CACHE_TTL_MS ?? 100_000);
   const cacheKey = programId.toBase58();
   // module-scoped cache stored on global
@@ -244,7 +259,8 @@ export const getAvailableTokens = async ({
   if (!g.__BC_TOKEN_CACHE__) {
     g.__BC_TOKEN_CACHE__ = new Map<string, { t: number; data: UserToken[] }>();
   }
-  const cache: Map<string, { t: number; data: UserToken[] }> = g.__BC_TOKEN_CACHE__;
+  const cache: Map<string, { t: number; data: UserToken[] }> =
+    g.__BC_TOKEN_CACHE__;
   const hit = cache.get(cacheKey);
   const now = Date.now();
   if (hit && now - hit.t < CACHE_TTL_MS) {
@@ -282,12 +298,7 @@ export const getAvailableTokens = async ({
       const realSolReserves = BigInt(decoded.real_sol_reserves);
       const realTokenReserves = BigInt(decoded.real_token_reserves);
 
-      console.log("TOken metadata name: ", tokenMetadata?.name);
-
-      console.log("Virtual SOL reserves:", virtualSolReserves.toString());
-      console.log("Virtual token reserves:", virtualTokenReserves.toString());
-      console.log("Real SOL reserves:", realSolReserves.toString());
-      console.log("Real token reserves:", realTokenReserves.toString());
+      console.log(pubkey);
 
       const currentPrice = calculateTokenPrice(
         virtualSolReserves,
@@ -324,7 +335,6 @@ export const getAvailableTokens = async ({
 
 export const buyTokens = async ({
   connection,
-  programId,
   buyerKeypair,
   tokenMint,
   amount,
@@ -334,6 +344,7 @@ export const buyTokens = async ({
     const wallet = new Wallet(buyerKeypair);
     const provider = new AnchorProvider(connection, wallet);
     const program = new Program(idl, provider);
+    const programId = program.programId;
     const relayerKeypair = keyPairFromString(process.env.RELAYER_PRIVATE_KEY!);
 
     const solAmount = new BN_VALUE(amount).mul(new BN(LAMPORTS_PER_SOL));
@@ -367,7 +378,7 @@ export const buyTokens = async ({
 
     const relayerTokenAccount = await getAssociatedTokenAddress(
       tokenMint,
-      relayerKeypair.publicKey,
+      relayerKeypair.publicKey
     );
 
     const tx = new Transaction();
@@ -412,13 +423,16 @@ export const buyTokens = async ({
 
 export const sellTokens = async ({
   creator,
-  programId,
   connection,
   tokensIn,
   tokenMint,
   sellerKeypair,
 }: SellTokensParams) => {
   try {
+    const wallet = new Wallet(sellerKeypair);
+    const provider = new AnchorProvider(connection, wallet);
+    const program = new Program(idl, provider);
+    const programId = program.programId;
     const [bondingCurve] = PublicKey.findProgramAddressSync(
       [Buffer.from("bonding-curve"), tokenMint.toBuffer(), creator.toBuffer()],
       programId
@@ -439,11 +453,6 @@ export const sellTokens = async ({
       bondingCurve,
       true
     );
-
-    const wallet = new Wallet(sellerKeypair);
-
-    const provider = new AnchorProvider(connection, wallet);
-    const program = new Program(idl, provider);
 
     const tx = await program.methods
       .sellTokens(tokensIn)

@@ -4,9 +4,9 @@
  */
 
 import { Markup } from "telegraf";
-import { DcaSession, DcaFrequency } from "./types";
-import { calculateNextExecutionTime, getFrequencyDisplay, getStatusEmoji, formatSmallestUnit } from "./utils";
-import { StrategyAnalytics, formatNumber, formatPnL, formatTokenAmount, calculateStrategyAnalytics } from "./analytics";
+import { DcaSession, DcaFrequency } from "./types.js";
+import { calculateNextExecutionTime, getFrequencyDisplay, getStatusEmoji, formatSmallestUnit } from "./utils.js";
+import { StrategyAnalytics, formatNumber, formatPnL, formatTokenAmount, calculateStrategyAnalytics } from "./analytics.js";
 import { getSolPriceUSD, formatUSD } from "@repo/services/price";
 
 /**

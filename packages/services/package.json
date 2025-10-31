@@ -1,6 +1,9 @@
 {
   "name": "@repo/services",
   "version": "1.0.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
     "./solana": "./src/solana.ts",
     "./raydium": "./src/raydium.ts",
@@ -10,6 +13,7 @@
     "./quote": "./src/quote.ts",
     "./trade": "./src/trade.ts",
     "./dca-utils": "./src/dca/utils.ts",
+    "./dca": "./src/dca/utils.ts",
     "./token": "./src/token.ts"
   },
   "scripts": {

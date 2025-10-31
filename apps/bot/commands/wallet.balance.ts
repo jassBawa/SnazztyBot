@@ -4,7 +4,7 @@ import {
   getBalances,
   getTokenBalances,
 } from "@repo/services/solana";
-import { getTelegramId } from "../utils/telegram";
+import { getTelegramId } from "../utils/telegram.js";
 import { getSolPriceUSD, formatUSD } from "@repo/services/price";
 
 export function registerWalletBalance(bot: Telegraf) {

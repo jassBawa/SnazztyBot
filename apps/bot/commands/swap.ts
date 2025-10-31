@@ -1,13 +1,13 @@
 import { Telegraf, Markup } from "telegraf";
 import { getOrCreateUserKeypair, getBalances, isValidSolanaAddress, getTokenBalance } from "@repo/services/solana";
-import { getTelegramId } from "../utils/telegram";
-import { backToMainKeyboard, swapOptionsKeyboard } from "../utils/keyboards";
+import { getTelegramId } from "../utils/telegram.js";
+import { backToMainKeyboard, swapOptionsKeyboard } from "../utils/keyboards.js";
 import { swapTokenForToken, previewTokenForToken } from "@repo/services/raydium";
 import { getQuoteBuy, getQuoteSell } from "@repo/services/quote";
 import { executeBuy, executeSell } from "@repo/services/trade";
 
 // Store user swap sessions
-import { userSessions } from "./swap.session";
+import { userSessions } from "./swap.session.js";
 
 export function registerSwapCommands(bot: Telegraf) {
   // Buy token action

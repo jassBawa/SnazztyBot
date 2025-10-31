@@ -1,9 +1,8 @@
-version: '3.8'
-
 services:
+  # PostgreSQL Database
   db:
     image: postgres:15
-    container_name: telegram_db
+    container_name: blowupbot_db
     restart: always
     environment:
       POSTGRES_USER: postgres
@@ -13,6 +12,113 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - blowupbot-network
+
+  # Prisma migrate + seed (one-off job)
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/scheduler/Dockerfile
+    container_name: blowupbot_migrate
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/telegram_bot
+    volumes:
+      - ./packages:/app/packages
+    command: >-
+       sh -c "pnpm --dir packages/database exec prisma migrate deploy && pnpm --dir packages/database exec prisma generate && pnpm --dir packages/database exec tsx src/seed.ts"
+    networks:
+      - blowupbot-network
+
+  # Telegram Bot Service
+  bot:
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+    container_name: blowupbot_bot
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/telegram_bot
+      BOT_TOKEN: ${BOT_TOKEN}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL}
+      SOLANA_CLUSTER: ${SOLANA_CLUSTER:-devnet}
+      PROGRAM_ID: ${PROGRAM_ID}
+    volumes:
+      - ./apps/bot:/app/apps/bot
+      - ./packages:/app/packages
+      - /app/node_modules
+      - /app/apps/bot/node_modules
+      - /app/packages/database/node_modules
+      - /app/packages/services/node_modules
+    networks:
+      - blowupbot-network
+
+  # Scheduler Service (DCA Executor)
+  scheduler:
+    build:
+      context: .
+      dockerfile: apps/scheduler/Dockerfile
+    container_name: blowupbot_scheduler
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/telegram_bot
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL}
+      SOLANA_CLUSTER: ${SOLANA_CLUSTER:-devnet}
+      PROGRAM_ID: ${PROGRAM_ID}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    volumes:
+      - ./apps/scheduler:/app/apps/scheduler
+      - ./packages:/app/packages
+      - /app/node_modules
+      - /app/apps/scheduler/node_modules
+      - /app/packages/database/node_modules
+      - /app/packages/services/node_modules
+    networks:
+      - blowupbot-network
+
+  # Off-chain Relayer Service
+  offchain-relayer:
+    build:
+      context: .
+      dockerfile: apps/off-chain-relayer/Dockerfile
+    container_name: blowupbot_relayer
+    restart: always
+    environment:
+      NODE_ENV: production
+      RPC_URL: ${RPC_URL:-https://api.devnet.solana.com}
+      PROGRAM_ID: ${PROGRAM_ID}
+      RELAYER_PRIVATE_KEY: ${RELAYER_PRIVATE_KEY}
+    volumes:
+      - ./apps/off-chain-relayer:/app/apps/off-chain-relayer
+    networks:
+      - blowupbot-network
 
 volumes:
   pgdata:
+
+networks:
+  blowupbot-network:
+    driver: bridge

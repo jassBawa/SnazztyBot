@@ -1,22 +1,28 @@
 import { Github } from "lucide-react"
+import Image from "next/image"
 
 export function Header() {
   return (
     <header className="fixed top-0 z-50 w-full border-b border-white/5 bg-[#0a0a0a]/80 backdrop-blur-md">
       <div className="container mx-auto flex h-16 items-center justify-between px-6">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5">
-            <span className="text-lg font-bold text-white">S</span>
-          </div>
+        <div className="flex items-center gap-3">
+          <Image 
+            src="/images/logo.png" 
+            alt="BlowUpBot Logo" 
+            width={40}
+            height={40}
+            className="h-10 w-10 rounded-full object-cover"
+            priority
+          />
           <span className="text-xl font-semibold tracking-tight">
-            <span className="text-white">Snazzty</span>
+            <span className="text-white">BlowUp</span>
             <span className="text-gray-500">Bot</span>
           </span>
         </div>
 
         <nav className="flex items-center gap-4">
           <a 
-            href="https://github.com/yourusername/snazztybot" 
+            href="https://github.com/jassBawa/BlowUpBot/" 
             target="_blank" 
             rel="noopener noreferrer"
             className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-white/5 hover:text-white"
@@ -25,7 +31,7 @@ export function Header() {
             <span className="hidden sm:inline">GitHub</span>
           </a>
           <a 
-            href="https://t.me/your_bot_username" 
+            href="https://t.me/BlowUpBot" 
             target="_blank" 
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 rounded-lg bg-[#22d3ee] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#06b6d4]"

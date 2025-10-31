@@ -7,8 +7,8 @@ import {
 import { getTokenPairBySymbols } from '@repo/database/tokenPair';
 import { getOrCreateUserKeypair, hasSufficientBalance } from '@repo/services/solana';
 import { swapSolForToken } from '@repo/services/raydium';
-import { calculateNextExecutionTime, fromSmallestUnit, toSmallestUnit } from '@repo/services/dca-utils';
-import type { StrategyWithUser, ExecutionResult } from './types.js';
+import { calculateNextExecutionTime, fromSmallestUnit, toSmallestUnit } from '@repo/services/dca';
+import type { StrategyWithUser, ExecutionResult } from './types';
 
 async function executeDcaStrategy(strategy: StrategyWithUser): Promise<ExecutionResult> {
   const strategyId = strategy.id;
