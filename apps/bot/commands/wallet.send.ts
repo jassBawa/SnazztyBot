@@ -1,6 +1,6 @@
 import { Telegraf } from "telegraf";
 import { getOrCreateUserKeypair, getBalances, sendToken } from "@repo/services/solana";
-import { getTelegramId } from "../utils/telegram";
+import { getTelegramId } from "../utils/telegram.js";
 
 export function registerWalletSend(bot: Telegraf) {
   bot.command("wallet_send", async (ctx) => {

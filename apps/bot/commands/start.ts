@@ -1,7 +1,7 @@
 import { Telegraf } from "telegraf";
 import { getOrCreateUserKeypair, getBalances, getTokenBalances, getPublicKeyForUser, ensureDbUserWithWallet, claimAirdrop } from "@repo/services/solana";
-import { getUserDataFromContext, getTelegramId } from "../utils/telegram";
-import { mainMenuKeyboard, balanceKeyboard, backToMainKeyboard, sendInstructionsKeyboard } from "../utils/keyboards";
+import { getUserDataFromContext, getTelegramId } from "../utils/telegram.js";
+import { mainMenuKeyboard, balanceKeyboard, backToMainKeyboard, sendInstructionsKeyboard } from "../utils/keyboards.js";
 
 export function registerStart(bot: Telegraf) {
   bot.start(async (ctx) => {

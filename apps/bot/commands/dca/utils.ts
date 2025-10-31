@@ -2,7 +2,7 @@
  * DCA Utility Functions
  */
 
-import { DcaFrequency } from "./types";
+import { DcaFrequency } from "./types.js";
 
 /**
  * Calculate the next execution time based on frequency

@@ -4,7 +4,7 @@
 
 import { previewTokenForToken } from "@repo/services/raydium";
 import { getTokenPairBySymbols } from "@repo/database/tokenPair";
-import { fromSmallestUnit } from "./utils";
+import { fromSmallestUnit } from "./utils.js";
 
 export interface StrategyAnalytics {
   totalInvested: number;

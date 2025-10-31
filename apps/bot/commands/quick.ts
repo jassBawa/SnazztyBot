@@ -1,7 +1,7 @@
 import { Telegraf } from "telegraf";
 import { getOrCreateUserKeypair, getBalances, getTokenBalances } from "@repo/services/solana";
-import { getTelegramId } from "../utils/telegram";
-import { backToMainKeyboard } from "../utils/keyboards";
+import { getTelegramId } from "../utils/telegram.js";
+import { backToMainKeyboard } from "../utils/keyboards.js";
 
 /**
  * Register quick/shortcut commands for better UX

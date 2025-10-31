@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { executeDcaStrategies } from './executor.js';
+import { executeDcaStrategies } from './executor';
 import {config} from "dotenv";
 
 config()

@@ -4,9 +4,9 @@ import {
   deleteSession,
   getSession,
   updateSession,
-} from "bot/utils/tokenCreationSession";
+} from "../bot/utils/tokenCreationSession.js";
 import { Telegraf, Markup } from "telegraf";
-import { tokenOptionsKeyboard } from "utils/keyboards";
+import { tokenOptionsKeyboard } from "../utils/keyboards.js";
 import {
   buyTokens,
   calculateSolOut,
@@ -21,9 +21,9 @@ import {
 } from "@repo/services/token";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getOrCreateUserKeypair } from "@repo/services/solana";
-import { getTelegramId } from "utils/telegram";
+import { getTelegramId } from "../utils/telegram.js";
 import { BN } from "bn.js";
-import { clearSwapSession, hasSwapSession } from "./swap.session";
+import { clearSwapSession, hasSwapSession } from "./swap.session.js";
 
 export const registerTokenCommands = async (bot: Telegraf) => {
   const connection = new Connection(process.env.SOLANA_RPC_URL!);

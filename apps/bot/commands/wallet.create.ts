@@ -1,6 +1,6 @@
 import { Telegraf } from "telegraf";
 import { getPublicKeyForUser, ensureDbUserWithWallet } from "@repo/services/solana";
-import { getUserDataFromContext } from "../utils/telegram";
+import { getUserDataFromContext } from "../utils/telegram.js";
 
 export function registerWalletCreate(bot: Telegraf) {
   bot.command("wallet_create", async (ctx) => {

@@ -1,9 +1,9 @@
 import { Telegraf } from "telegraf";
 import { getOrCreateUserKeypair } from "@repo/services/solana";
-import { getTelegramId } from "../utils/telegram";
+import { getTelegramId } from "../utils/telegram.js";
 import { calculatePortfolioValue } from "@repo/services/portfolio";
 import { formatUSD } from "@repo/services/price";
-import { backToMainKeyboard } from "../utils/keyboards";
+import { backToMainKeyboard } from "../utils/keyboards.js";
 
 /**
  * Register portfolio command
