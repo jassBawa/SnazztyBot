@@ -16,7 +16,7 @@ export function Header() {
 
         <nav className="flex items-center gap-4">
           <a 
-            href="https://github.com/yourusername/BlowUpBot" 
+            href="https://github.com/jassBawa/BlowUpBot/" 
             target="_blank" 
             rel="noopener noreferrer"
             className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-white/5 hover:text-white"
@@ -25,7 +25,7 @@ export function Header() {
             <span className="hidden sm:inline">GitHub</span>
           </a>
           <a 
-            href="https://t.me/your_bot_username" 
+            href="https://t.me/BlowUpBot" 
             target="_blank" 
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 rounded-lg bg-[#22d3ee] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#06b6d4]"

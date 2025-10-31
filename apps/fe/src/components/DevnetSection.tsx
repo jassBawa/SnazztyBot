@@ -22,7 +22,7 @@ export function DevnetSection() {
               
               <div className="flex flex-col gap-3 sm:flex-row">
                 <a 
-                  href="https://t.me/your_bot_username" 
+                  href="https://t.me/BlowUpBot" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#22d3ee] px-6 py-3 text-base font-semibold text-white transition-all hover:bg-[#06b6d4]"
