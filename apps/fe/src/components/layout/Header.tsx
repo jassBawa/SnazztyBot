@@ -1,13 +1,19 @@
 import { Github } from "lucide-react"
+import Image from "next/image"
 
 export function Header() {
   return (
     <header className="fixed top-0 z-50 w-full border-b border-white/5 bg-[#0a0a0a]/80 backdrop-blur-md">
       <div className="container mx-auto flex h-16 items-center justify-between px-6">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5">
-            <span className="text-lg font-bold text-white">B</span>
-          </div>
+        <div className="flex items-center gap-3">
+          <Image 
+            src="/images/logo.png" 
+            alt="BlowUpBot Logo" 
+            width={40}
+            height={40}
+            className="h-10 w-10 rounded-full object-cover"
+            priority
+          />
           <span className="text-xl font-semibold tracking-tight">
             <span className="text-white">BlowUp</span>
             <span className="text-gray-500">Bot</span>

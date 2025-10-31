@@ -17,9 +17,9 @@ export const metadata: Metadata = {
   description: "Automate Dollar-Cost Averaging strategies and launch tokens on Solana with our Telegram bot. Test risk-free on devnet. Trade 24/7 and launch tokens with bonding curves like pump.fun - all from Telegram.",
   keywords: ["Solana bot", "Telegram bot", "DCA trading", "token launch", "cryptocurrency trading", "automated trading", "bonding curve", "pump.fun alternative", "trading bot", "crypto automation"],
   icons: {
-    icon: "/Robot and Rocket Icon Design.png",
-    shortcut: "/Robot and Rocket Icon Design.png",
-    apple: "/Robot and Rocket Icon Design.png",
+    icon: "/images/logo.png",
+    shortcut: "/images/logo.png",
+    apple: "/images/logo.png",
   },
   openGraph: {
     title: "BlowUpBot - Solana DCA Trading & Token Launch Bot",

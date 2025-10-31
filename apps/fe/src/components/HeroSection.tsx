@@ -121,7 +121,7 @@ export function HeroSection() {
             <div className="text-sm text-gray-500">Automated Trading</div>
           </div>
           <div className="text-center">
-            <div className="mb-2 text-3xl font-bold text-white">0.3%</div>
+            <div className="mb-2 text-3xl font-bold text-white">0%</div>
             <div className="text-sm text-gray-500">Platform Fee</div>
           </div>
           <div className="text-center">
