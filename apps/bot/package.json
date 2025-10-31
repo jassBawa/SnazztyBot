@@ -1,8 +1,7 @@
 {
   "name": "snazztybot",
   "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "type": "module",
   "scripts": {
     "dev": "tsx watch index.ts",
     "build": "tsc -b",
